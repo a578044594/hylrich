@@ -6,11 +6,6 @@ service AgentService {
   rpc ExecuteTool (ToolRequest) returns (ToolResponse);
   rpc GetMetrics (MetricsRequest) returns (MetricsResponse);
   rpc HealthCheck (HealthRequest) returns (HealthResponse);
-  
-  // 新增流式通信方法
-  rpc StreamTools (stream ToolRequest) returns (stream ToolResponse);
-  rpc StreamMetrics (MetricsRequest) returns (stream MetricUpdate);
-  rpc StreamHealth (HealthRequest) returns (stream HealthUpdate);
 }
 
 message ToolRequest {
@@ -47,19 +42,4 @@ message HealthResponse {
   string status = 1;
   string timestamp = 2;
   map<string, bool> services = 3;
-}
-
-// 新增流式消息类型
-message MetricUpdate {
-  string metric_name = 1;
-  double value = 2;
-  map<string, string> labels = 3;
-  int64 timestamp = 4;
-}
-
-message HealthUpdate {
-  string service_name = 1;
-  bool healthy = 2;
-  string status_message = 3;
-  int64 timestamp = 4;
 }
