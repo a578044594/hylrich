@@ -1,67 +1,39 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileWriteTool = void 0;
-const EnhancedMCPTool_1 = require("./EnhancedMCPTool");
-const promises_1 = __importDefault(require("fs/promises"));
+const EnhancedMCPTool_1 = require("../tools/EnhancedMCPTool");
+const ToolError_1 = require("../core/ToolError");
 class FileWriteTool extends EnhancedMCPTool_1.EnhancedMCPTool {
-    constructor() {
-        super(...arguments);
-        this.name = "file_write";
-        this.description = "写入文件内容工具";
-        this.parameters = {
-            type: "object",
-            properties: {
-                filePath: {
-                    type: "string",
-                    description: "文件路径"
-                },
-                content: {
-                    type: "string",
-                    description: "要写入的内容"
-                },
-                encoding: {
-                    type: "string",
-                    enum: ["utf8", "utf16le", "latin1", "base64", "hex", "ascii"],
-                    default: "utf8",
-                    description: "文件编码"
-                }
-            },
-            required: ["filePath", "content"],
-            additionalProperties: false
-        };
-    }
-    async executeInternal(input) {
-        const { filePath, content, encoding = "utf8" } = input;
-        // 输入验证
-        if (!filePath || typeof filePath !== "string") {
-            throw new Error("文件路径必须是非空字符串");
+    async executeInternal(params) {
+        // 验证输入
+        if (!params.path || typeof params.path !== "string") {
+            throw new ToolError_1.ToolError("文件路径必须是非空字符串");
         }
-        if (typeof content !== "string") {
-            throw new Error("内容必须是字符串");
+        if (!params.content || typeof params.content !== "string") {
+            throw new ToolError_1.ToolError("文件内容必须是非空字符串");
         }
-        // 安全检查
-        if (filePath.includes("..") || filePath.startsWith("/")) {
-            throw new Error("无效的文件路径");
+        // 安全检查：防止路径遍历攻击
+        const normalizedPath = params.path.replace(/\\/g, '/');
+        if (normalizedPath.includes('..') || normalizedPath.startsWith('.')) {
+            throw new ToolError_1.ToolError("无效的文件路径");
         }
+        // 写入文件
         try {
-            await promises_1.default.writeFile(filePath, content, { encoding: encoding });
-            return {
-                success: true,
-                filePath,
-                bytesWritten: Buffer.byteLength(content, encoding)
-            };
+            await this.writeFile(params.path, params.content);
         }
         catch (error) {
-            if (error.code === "EACCES") {
-                throw new Error(`没有权限写入文件: ${filePath}`);
-            }
-            else {
-                throw new Error(`写入文件失败: ${error.message}`);
-            }
+            throw new ToolError_1.ToolError(`文件写入失败: ${error.message}`);
         }
+        return {
+            success: true,
+            path: params.path
+        };
+    }
+    async writeFile(path, content) {
+        // 实现文件写入逻辑
+        // 这里使用fs模块写入文件
+        const fs = require('fs').promises;
+        await fs.writeFile(path, content, 'utf8');
     }
 }
 exports.FileWriteTool = FileWriteTool;

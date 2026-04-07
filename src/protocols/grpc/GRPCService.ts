@@ -1,272 +1,229 @@
-import * as grpc from '@grpc/grpc-js';
-import * as protoLoader from '@grpc/proto-loader';
-import { join } from 'path';
-import { FileReadTool } from '../../tools/FileReadTool';
+import { Server, ServerCredentials } from '@grpc/grpc-js';
+import { promisify } from 'util';
+import { Tool } from '../../core/Tool';
+import { EnhancedMCPTool } from '../../tools/EnhancedMCPTool';
 import { BasicMetricsCollector } from '../../monitoring/BasicMetricsCollector';
-import { ToolRequest, ToolResponse, MetricsRequest, MetricsResponse, HealthRequest, HealthResponse, MetricUpdate, HealthUpdate } from '../../generated/agent';
+import { AgentService } from '../../generated/agent'; // 修正导入
 
-export interface GRPCServiceConfig {
+interface GRPCServiceConfig {
   port: number;
-  protoPath: string;
+  host?: string;
 }
 
-export class GRPCService {
-  private server: grpc.Server;
-  private config: GRPCServiceConfig;
-  private fileReadTool: FileReadTool;
+interface ToolExecutionMetrics {
+  startTime: number;
+  endTime?: number;
+  success?: boolean;
+  error?: string;
+}
+
+interface MetricData {
+  name: string;
+  value: number;
+  timestamp: number;
+  tags?: Record<string, string>;
+}
+
+interface MetricSummary {
+  count: number;
+  sum: number;
+  average: number;
+  min: number;
+  max: number;
+}
+
+export class GRPCService implements AgentService {
+  private server: Server;
+  private enhancedTool: EnhancedMCPTool;
   private metricsCollector: BasicMetricsCollector;
-  
-  constructor(config: GRPCServiceConfig) {
-    this.config = config;
-    this.server = new grpc.Server();
-    this.fileReadTool = new FileReadTool();
+  private executionMetrics: Map<string, ToolExecutionMetrics> = new Map();
+
+  constructor(private config: GRPCServiceConfig) {
+    this.server = new Server();
+    this.enhancedTool = new EnhancedMCPTool();
     this.metricsCollector = new BasicMetricsCollector();
-  }
-
-  async setupServices(): Promise<void> {
-    try {
-      // 加载proto文件
-      const packageDefinition = protoLoader.loadSync(
-        this.config.protoPath,
-        {
-          keepCase: true,
-          longs: String,
-          enums: String,
-          defaults: true,
-          oneofs: true
-        }
-      );
-
-      const agentPackage = grpc.loadPackageDefinition(packageDefinition) as any;
-
-      // 注册服务方法
-      this.server.addService(agentPackage.agent.AgentService.service, {
-        executeTool: this.executeTool.bind(this),
-        getMetrics: this.getMetrics.bind(this),
-        healthCheck: this.healthCheck.bind(this),
-        
-        // 新增流式方法
-        streamTools: this.streamTools.bind(this),
-        streamMetrics: this.streamMetrics.bind(this),
-        streamHealth: this.streamHealth.bind(this),
-      });
-
-      console.log('gRPC services setup completed');
-    } catch (error) {
-      console.error('Failed to setup gRPC services:', error);
-      throw error;
-    }
-  }
-
-  private async executeTool(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>): Promise<void> {
-    const startTime = Date.now();
     
+    this.setupService();
+  }
+
+  private setupService(): void {
+    // 注册gRPC服务方法
+    this.server.addService(AgentService, {
+      executeTool: this.executeTool.bind(this),
+      checkHealth: this.checkHealth.bind(this),
+      getMetrics: this.getMetrics.bind(this),
+      getSystemStats: this.getSystemStats.bind(this),
+      streamTools: this.streamTools.bind(this),
+      streamMetrics: this.streamMetrics.bind(this),
+      streamHealth: this.streamHealth.bind(this)
+    });
+  }
+
+  async executeTool(call: any, callback: any): Promise<void> {
+    const request = call.request as ToolExecutionRequest;
+    const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // 记录执行开始
+    this.executionMetrics.set(executionId, {
+      startTime: Date.now()
+    });
+
     try {
-      const request = call.request as ToolRequest;
-      const result = await this.fileReadTool.execute(request);
+      console.log(`Executing tool: ${request.toolName}`);
       
-      const response: ToolResponse = {
-        success: true,
-        result_data: result,
-        error_message: '',
-        execution_time_ms: Date.now() - startTime
-      };
-      
-      // 记录指标
-      this.metricsCollector.recordMetric('grpc_tool_execution_time', Date.now() - startTime, {
+      const result = await this.enhancedTool.execute({
         tool_name: request.tool_name,
-        success: 'true'
+        parameters: request.parameters || {}
       });
+
+      // 记录执行成功
+      this.executionMetrics.get(executionId)!.endTime = Date.now();
+      this.executionMetrics.get(executionId)!.success = true;
+
+      const executionTime = Date.now() - this.executionMetrics.get(executionId)!.startTime;
       
+      const response: ToolExecutionResponse = {
+        success: true,
+        result: JSON.stringify(result),
+        executionTime,
+        executionId
+      };
+
       callback(null, response);
     } catch (error) {
-      const response: ToolResponse = {
+      // 记录执行失败
+      this.executionMetrics.get(executionId)!.endTime = Date.now();
+      this.executionMetrics.get(executionId)!.success = false;
+      this.executionMetrics.get(executionId)!.error = error.message;
+
+      const executionTime = Date.now() - this.executionMetrics.get(executionId)!.startTime;
+      
+      const response: ToolExecutionResponse = {
         success: false,
-        result_data: new Uint8Array(),
-        error_message: error instanceof Error ? error.message : 'Unknown error',
-        execution_time_ms: Date.now() - startTime
+        error: error.message,
+        executionTime,
+        executionId
       };
-      
-      // 记录错误指标
-      this.metricsCollector.recordMetric('grpc_tool_execution_time', Date.now() - startTime, {
-        tool_name: call.request?.tool_name || 'unknown',
-        success: 'false',
-        error: error instanceof Error ? error.message : 'unknown'
-      });
-      
+
       callback(null, response);
     }
   }
 
-  private async getMetrics(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>): Promise<void> {
-    try {
-      const request = call.request as MetricsRequest;
-      const metrics = this.metricsCollector.getMetrics(request.metric_name);
-      
-      const response: MetricsResponse = {
-        summaries: metrics
-      };
-      
-      callback(null, response);
-    } catch (error) {
-      const response: MetricsResponse = {
-        summaries: {}
-      };
-      callback(null, response);
-    }
-  }
-
-  private async healthCheck(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>): Promise<void> {
-    const response: HealthResponse = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      services: {
-        grpc: true,
-        metrics: true,
-        tools: true
-      }
+  async checkHealth(call: any, callback: any): Promise<void> {
+    const request = call.request as HealthCheckRequest;
+    
+    const response: HealthCheckResponse = {
+      status: 'SERVING',
+      services: ['agent'],
+      timestamp: Date.now(),
+      version: '1.0.0'
     };
+
     callback(null, response);
   }
 
-  // 新增流式方法实现
-  private async streamTools(call: grpc.ServerDuplexStream<any, any>): Promise<void> {
-    console.log('StreamTools connection established');
+  async getMetrics(call: any, callback: any): Promise<void> {
+    const request = call.request as MetricsRequest;
     
-    call.on('data', async (request: ToolRequest) => {
-      try {
-        const startTime = Date.now();
-        const result = await this.fileReadTool.execute(request);
-        
-        const response: ToolResponse = {
-          success: true,
-          result_data: result,
-          error_message: '',
-          execution_time_ms: Date.now() - startTime
-        };
-        
-        call.write(response);
-        
-        // 记录指标
-        this.metricsCollector.recordMetric('grpc_stream_tool_execution_time', Date.now() - startTime, {
-          tool_name: request.tool_name,
-          success: 'true'
-        });
-      } catch (error) {
-        const response: ToolResponse = {
-          success: false,
-          result_data: new Uint8Array(),
-          error_message: error instanceof Error ? error.message : 'Unknown error',
-          execution_time_ms: Date.now() - Date.now()
-        };
-        
-        call.write(response);
-        
-        // 记录错误指标
-        this.metricsCollector.recordMetric('grpc_stream_tool_execution_time', Date.now() - Date.now(), {
-          tool_name: request.tool_name || 'unknown',
-          success: 'false',
-          error: error instanceof Error ? error.message : 'unknown'
-        });
+    const metrics: MetricData[] = [
+      {
+        name: 'tool_execution_count',
+        value: this.executionMetrics.size,
+        timestamp: Date.now(),
+        tags: { service: 'agent' }
+      },
+      {
+        name: 'successful_executions',
+        value: Array.from(this.executionMetrics.values()).filter(m => m.success).length,
+        timestamp: Date.now(),
+        tags: { service: 'agent' }
+      },
+      {
+        name: 'failed_executions',
+        value: Array.from(this.executionMetrics.values()).filter(m => !m.success).length,
+        timestamp: Date.now(),
+        tags: { service: 'agent' }
       }
-    });
+    ];
 
-    call.on('end', () => {
-      console.log('StreamTools connection ended');
-      call.end();
-    });
+    const response: MetricsResponse = {
+      metrics: metrics.map(m => ({
+        name: m.name,
+        value: m.value,
+        timestamp: m.timestamp,
+        tags: m.tags || {}
+      }))
+    };
 
-    call.on('error', (error) => {
-      console.error('StreamTools error:', error);
-    });
+    callback(null, response);
   }
 
-  private async streamMetrics(call: grpc.ServerWritableStream<any, any>): Promise<void> {
-    const request = call.request as MetricsRequest;
-    console.log(`StreamMetrics started for: ${request.metric_name}`);
+  async getSystemStats(call: any, callback: any): Promise<void> {
+    const request = call.request as SystemStatsRequest;
     
-    // 模拟实时指标流
-    let count = 0;
+    const response: SystemStatsResponse = {
+      totalTools: 1, // 目前只有EnhancedMCPTool
+      activeConnections: 0,
+      memoryUsage: process.memoryUsage().heapUsed,
+      uptime: process.uptime(),
+      timestamp: Date.now()
+    };
+
+    callback(null, response);
+  }
+
+  streamTools(call: any): void {
+    // 流式工具执行（待实现）
+    call.write({
+      toolName: 'stream_tool',
+      message: 'Streaming not yet implemented'
+    });
+    call.end();
+  }
+
+  streamMetrics(call: any): void {
+    // 流式指标监控（待实现）
     const interval = setInterval(() => {
-      if (count >= 10) {
-        clearInterval(interval);
-        call.end();
-        return;
-      }
-      
-      const update: MetricUpdate = {
-        metric_name: request.metric_name,
+      call.write({
+        name: 'stream_metric',
         value: Math.random() * 100,
-        labels: { iteration: count.toString() },
         timestamp: Date.now()
-      };
-      
-      call.write(update);
-      count++;
+      });
     }, 1000);
 
     call.on('cancelled', () => {
-      console.log('StreamMetrics cancelled');
       clearInterval(interval);
     });
   }
 
-  private async streamHealth(call: grpc.ServerWritableStream<any, any>): Promise<void> {
-    console.log('StreamHealth started');
-    
-    // 模拟健康检查流
-    let count = 0;
-    const services = ['grpc', 'metrics', 'tools', 'database', 'cache'];
-    
+  streamHealth(call: any): void {
+    // 流式健康检查（待实现）
     const interval = setInterval(() => {
-      if (count >= 5) {
-        clearInterval(interval);
-        call.end();
-        return;
-      }
-      
-      const randomService = services[Math.floor(Math.random() * services.length)];
-      const update: HealthUpdate = {
-        service_name: randomService,
-        healthy: Math.random() > 0.2,
-        status_message: Math.random() > 0.2 ? 'OK' : 'Degraded',
+      call.write({
+        status: 'SERVING',
         timestamp: Date.now()
-      };
-      
-      call.write(update);
-      count++;
-    }, 2000);
+      });
+    }, 5000);
 
     call.on('cancelled', () => {
-      console.log('StreamHealth cancelled');
       clearInterval(interval);
     });
   }
 
   async start(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.server.bindAsync(
-        `0.0.0.0:${this.config.port}`,
-        grpc.ServerCredentials.createInsecure(),
-        (error, port) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          
-          console.log(`gRPC server running on port ${port}`);
-          resolve();
-        }
-      );
-    });
+    const startAsync = promisify(this.server.bindAsync).bind(this.server);
+    
+    await startAsync(
+      `${this.config.host || '0.0.0.0'}:${this.config.port}`,
+      ServerCredentials.createInsecure()
+    );
+    
+    console.log(`gRPC server started on port ${this.config.port}`);
   }
 
   async stop(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server.tryShutdown(() => {
-        console.log('gRPC server stopped');
-        resolve();
-      });
-    });
+    const shutdownAsync = promisify(this.server.tryShutdown).bind(this.server);
+    await shutdownAsync();
+    console.log('gRPC server stopped');
   }
 }

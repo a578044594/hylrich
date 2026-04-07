@@ -1,159 +1,167 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GRPCService = void 0;
-const grpc = __importStar(require("@grpc/grpc-js"));
-const protoLoader = __importStar(require("@grpc/proto-loader"));
-const path_1 = require("path");
+const grpc_js_1 = require("@grpc/grpc-js");
+const util_1 = require("util");
 const EnhancedMCPTool_1 = require("../../tools/EnhancedMCPTool");
+const BasicMetricsCollector_1 = require("../../monitoring/BasicMetricsCollector");
+const agent_1 = require("../../generated/agent"); // 修正导入
 class GRPCService {
     constructor(config) {
         this.config = config;
-        this.server = new grpc.Server();
+        this.executionMetrics = new Map();
+        this.server = new grpc_js_1.Server();
         this.enhancedTool = new EnhancedMCPTool_1.EnhancedMCPTool();
-        this.metricsCollector = null;
-        this.setupServices();
+        this.metricsCollector = new BasicMetricsCollector_1.BasicMetricsCollector();
+        this.setupService();
     }
-    setupServices() {
-        // 加载proto文件
-        const packageDefinition = protoLoader.loadSync((0, path_1.join)(__dirname, '../protos/agent.proto'), {
-            keepCase: true,
-            longs: String,
-            enums: String,
-            defaults: true,
-            oneofs: true
+    setupService() {
+        // 注册gRPC服务方法
+        this.server.addService(agent_1.AgentService, {
+            executeTool: this.executeTool.bind(this),
+            checkHealth: this.checkHealth.bind(this),
+            getMetrics: this.getMetrics.bind(this),
+            getSystemStats: this.getSystemStats.bind(this),
+            streamTools: this.streamTools.bind(this),
+            streamMetrics: this.streamMetrics.bind(this),
+            streamHealth: this.streamHealth.bind(this)
         });
-        const proto = grpc.loadPackageDefinition(packageDefinition);
-        // 正确的proto结构访问
-        const agentPackage = proto.openclaw?.agent;
-        if (!agentPackage || !agentPackage.AgentService) {
-            throw new Error('Failed to load AgentService from proto definition');
-        }
-        // 添加AgentService实现
-        this.server.addService(agentPackage.AgentService.service, {
-            ExecuteTool: this.executeTool.bind(this),
-            GetSystemHealth: this.getSystemHealth.bind(this),
-            StreamMetrics: this.streamMetrics.bind(this)
-        });
-        console.log('gRPC services setup completed');
     }
     async executeTool(call, callback) {
-        const startTime = Date.now();
+        const request = call.request;
+        const executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // 记录执行开始
+        this.executionMetrics.set(executionId, {
+            startTime: Date.now()
+        });
         try {
-            const { tool_name, input_data } = call.request;
-            // 解析输入数据
-            const input = JSON.parse(input_data.toString());
-            // 执行工具
-            const result = await this.enhancedTool.execute(input);
-            const executionTime = Date.now() - startTime;
-            // 记录指标
-            this.metricsCollector.recordMetric('grpc_tool_execution_time', executionTime, {
-                tool: tool_name,
-                success: 'true'
+            console.log(`Executing tool: ${request.toolName}`);
+            const result = await this.enhancedTool.execute({
+                tool_name: request.tool_name,
+                parameters: request.parameters || {}
             });
-            callback(null, {
+            // 记录执行成功
+            this.executionMetrics.get(executionId).endTime = Date.now();
+            this.executionMetrics.get(executionId).success = true;
+            const executionTime = Date.now() - this.executionMetrics.get(executionId).startTime;
+            const response = {
                 success: true,
-                result_data: Buffer.from(JSON.stringify(result)),
-                execution_time_ms: executionTime
-            });
+                result: JSON.stringify(result),
+                executionTime,
+                executionId
+            };
+            callback(null, response);
         }
         catch (error) {
-            const executionTime = Date.now() - startTime;
-            this.metricsCollector.recordMetric('grpc_tool_execution_time', executionTime, {
-                tool: call.request.tool_name,
-                success: 'false',
-                error: error instanceof Error ? error.message : 'unknown'
-            });
-            callback(null, {
+            // 记录执行失败
+            this.executionMetrics.get(executionId).endTime = Date.now();
+            this.executionMetrics.get(executionId).success = false;
+            this.executionMetrics.get(executionId).error = error.message;
+            const executionTime = Date.now() - this.executionMetrics.get(executionId).startTime;
+            const response = {
                 success: false,
-                error_message: error instanceof Error ? error.message : 'Unknown error',
-                execution_time_ms: executionTime
-            });
+                error: error.message,
+                executionTime,
+                executionId
+            };
+            callback(null, response);
         }
     }
-    getSystemHealth(call, callback) {
-        const healthData = {
+    async checkHealth(call, callback) {
+        const request = call.request;
+        const response = {
+            status: 'SERVING',
+            services: ['agent'],
             timestamp: Date.now(),
-            tool_count: 1, // 目前只有一个工具
-            active_connections: 0, // 需要实现连接计数
-            active_agents: 1,
-            status: 'healthy'
+            version: '1.0.0'
         };
-        callback(null, healthData);
+        callback(null, response);
+    }
+    async getMetrics(call, callback) {
+        const request = call.request;
+        const metrics = [
+            {
+                name: 'tool_execution_count',
+                value: this.executionMetrics.size,
+                timestamp: Date.now(),
+                tags: { service: 'agent' }
+            },
+            {
+                name: 'successful_executions',
+                value: Array.from(this.executionMetrics.values()).filter(m => m.success).length,
+                timestamp: Date.now(),
+                tags: { service: 'agent' }
+            },
+            {
+                name: 'failed_executions',
+                value: Array.from(this.executionMetrics.values()).filter(m => !m.success).length,
+                timestamp: Date.now(),
+                tags: { service: 'agent' }
+            }
+        ];
+        const response = {
+            metrics: metrics.map(m => ({
+                name: m.name,
+                value: m.value,
+                timestamp: m.timestamp,
+                tags: m.tags || {}
+            }))
+        };
+        callback(null, response);
+    }
+    async getSystemStats(call, callback) {
+        const request = call.request;
+        const response = {
+            totalTools: 1, // 目前只有EnhancedMCPTool
+            activeConnections: 0,
+            memoryUsage: process.memoryUsage().heapUsed,
+            uptime: process.uptime(),
+            timestamp: Date.now()
+        };
+        callback(null, response);
+    }
+    streamTools(call) {
+        // 流式工具执行（待实现）
+        call.write({
+            toolName: 'stream_tool',
+            message: 'Streaming not yet implemented'
+        });
+        call.end();
     }
     streamMetrics(call) {
-        const { interval_ms } = call.request;
-        const interval = interval_ms || 1000;
-        const timer = setInterval(() => {
-            if (call.cancelled) {
-                clearInterval(timer);
-                return;
-            }
-            const metrics = {
-                timestamp: Date.now(),
-                cpu_usage: Math.random() * 100, // 模拟CPU使用率
-                memory_usage_mb: process.memoryUsage().heapUsed / 1024 / 1024,
-                message_throughput: Math.floor(Math.random() * 1000) // 模拟消息吞吐量
-            };
-            call.write(metrics);
-        }, interval);
+        // 流式指标监控（待实现）
+        const interval = setInterval(() => {
+            call.write({
+                name: 'stream_metric',
+                value: Math.random() * 100,
+                timestamp: Date.now()
+            });
+        }, 1000);
         call.on('cancelled', () => {
-            clearInterval(timer);
+            clearInterval(interval);
+        });
+    }
+    streamHealth(call) {
+        // 流式健康检查（待实现）
+        const interval = setInterval(() => {
+            call.write({
+                status: 'SERVING',
+                timestamp: Date.now()
+            });
+        }, 5000);
+        call.on('cancelled', () => {
+            clearInterval(interval);
         });
     }
     async start() {
-        return new Promise((resolve, reject) => {
-            this.server.bindAsync(`0.0.0.0:${this.config.port}`, grpc.ServerCredentials.createInsecure(), (error, port) => {
-                if (error) {
-                    reject(error);
-                }
-                else {
-                    console.log(`gRPC server running on port ${port}`);
-                    this.server.start();
-                    resolve();
-                }
-            });
-        });
+        const startAsync = (0, util_1.promisify)(this.server.bindAsync).bind(this.server);
+        await startAsync(`${this.config.host || '0.0.0.0'}:${this.config.port}`, grpc_js_1.ServerCredentials.createInsecure());
+        console.log(`gRPC server started on port ${this.config.port}`);
     }
     async stop() {
-        return new Promise((resolve) => {
-            this.server.tryShutdown(() => {
-                console.log('gRPC server stopped');
-                resolve();
-            });
-        });
+        const shutdownAsync = (0, util_1.promisify)(this.server.tryShutdown).bind(this.server);
+        await shutdownAsync();
+        console.log('gRPC server stopped');
     }
 }
 exports.GRPCService = GRPCService;

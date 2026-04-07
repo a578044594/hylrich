@@ -64,13 +64,4 @@ class HylrichCore {
     }
 }
 exports.HylrichCore = HylrichCore;
-return this.scheduler.scheduleTask(agentName, input, priority);
-getAgentStats(agentName, string);
-{
-    return this.scheduler.getAgentStats(agentName);
-}
-getQueueStats();
-{
-    return this.scheduler.getQueueStats();
-}
 //# sourceMappingURL=index.js.map

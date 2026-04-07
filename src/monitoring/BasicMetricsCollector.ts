@@ -1,63 +1,108 @@
-import { MetricsCollector } from "./MetricsCollector";
+// 基础指标收集器
 
-export class BasicMetricsCollector extends MetricsCollector {
-  private metrics: Map<string, number[]> = new Map();
-  
-  collectMetrics(): any {
-    const result: any = {};
+import { EventEmitter } from 'events';
+
+export interface MetricData {
+  name: string;
+  value: number;
+  unit?: string;
+  timestamp: number;
+  tags?: Record<string, any>;
+}
+
+export interface MetricStats {
+  count: number;
+  sum: number;
+  average: number;
+  min: number;
+  max: number;
+  last: number;
+}
+
+export class BasicMetricsCollector extends EventEmitter {
+  private metrics: Map<string, MetricData[]> = new Map();
+
+  constructor() {
+    super();
+    console.log('BasicMetricsCollector initialized');
+  }
+
+  recordMetric(
+    name: string,
+    value: number,
+    tags?: Record<string, any>,
+    unit?: string
+  ): void {
+    const metric: MetricData = {
+      name,
+      value,
+      unit,
+      timestamp: Date.now(),
+      tags
+    };
+
+    if (!this.metrics.has(name)) {
+      this.metrics.set(name, []);
+    }
+
+    this.metrics.get(name)!.push(metric);
+
+    // 触发指标更新事件
+    this.emit('metric', metric);
+  }
+
+  getMetricStats(name: string): MetricStats {
+    const metrics = this.metrics.get(name) || [];
     
-    for (const [metricName, values] of this.metrics.entries()) {
-      if (values.length > 0) {
-        result[metricName] = {
-          count: values.length,
-          sum: values.reduce((a, b) => a + b, 0),
-          avg: values.reduce((a, b) => a + b, 0) / values.length,
-          min: Math.min(...values),
-          max: Math.max(...values)
-        };
+    if (metrics.length === 0) {
+      return {
+        count: 0,
+        sum: 0,
+        average: 0,
+        min: 0,
+        max: 0,
+        last: 0
+      };
+    }
+
+    const stats: MetricStats = {
+      count: metrics.length,
+      sum: metrics.reduce((sum, m) => sum + m.value, 0),
+      average: metrics.reduce((sum, m) => sum + m.value, 0) / metrics.length,
+      min: Math.min(...metrics.map(m => m.value)),
+      max: Math.max(...metrics.map(m => m.value)),
+      last: metrics[metrics.length - 1].value
+    };
+
+    return stats;
+  }
+
+  exportMetrics(): MetricData[] {
+    const allMetrics: MetricData[] = [];
+    
+    for (const metrics of this.metrics.values()) {
+      allMetrics.push(...metrics);
+    }
+
+    return allMetrics;
+  }
+
+  clearOldData(ageInMs: number): void {
+    const cutoffTime = Date.now() - ageInMs;
+    
+    for (const [name, metrics] of this.metrics) {
+      const filtered = metrics.filter(m => m.timestamp > cutoffTime);
+      
+      if (filtered.length === 0) {
+        this.metrics.delete(name);
+      } else {
+        this.metrics.set(name, filtered);
       }
     }
-    
-    return result;
   }
-  
-  getMetrics(metricName?: string): any {
-    if (metricName) {
-      // 返回特定指标的统计
-      const result: any = {};
-      
-      for (const [key, values] of this.metrics.entries()) {
-        if (key.startsWith(metricName)) {
-          if (values.length > 0) {
-            result[key] = {
-              count: values.length,
-              sum: values.reduce((a, b) => a + b, 0),
-              avg: values.reduce((a, b) => a + b, 0) / values.length,
-              min: Math.min(...values),
-              max: Math.max(...values)
-            };
-          }
-        }
-      }
-      
-      return result;
-    }
-    
-    // 返回所有指标
-    return this.collectMetrics();
-  }
-  
-  recordMetric(name: string, value: number, tags?: Record<string, string>): void {
-    const metricKey = tags ? `${name}_${JSON.stringify(tags)}` : name;
-    
-    if (!this.metrics.has(metricKey)) {
-      this.metrics.set(metricKey, []);
-    }
-    
-    this.metrics.get(metricKey)!.push(value);
-  }
-  
-  clearMetrics(): void {
+
+  reset(): void {
     this.metrics.clear();
+    console.log('BasicMetricsCollector reset');
   }
 }
