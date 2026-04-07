@@ -55,13 +55,14 @@ export class FileReadTool extends EnhancedMCPTool {
         fileSize: stats.size,
         encoding: encoding as BufferEncoding
       };
-    } catch (error) {
-      if (error.code === "ENOENT") {
+    } catch (error: unknown) {
+      const err = error as { code?: string; message: string };
+      if (err.code === "ENOENT") {
         throw new Error(`文件不存在: ${filePath}`);
-      } else if (error.code === "EACCES") {
+      } else if (err.code === "EACCES") {
         throw new Error(`没有权限读取文件: ${filePath}`);
       } else {
-        throw new Error(`读取文件失败: ${error.message}`);
+        throw new Error(`读取文件失败: ${err.message}`);
       }
     }
   }

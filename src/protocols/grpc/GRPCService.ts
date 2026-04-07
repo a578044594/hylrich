@@ -1,8 +1,8 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { join } from 'path';
-import { EnhancedMCPTool } from '../../tools/EnhancedMCPTool';
-import { MetricsCollector } from '../../monitoring/MetricsCollector';
+import { FileReadTool } from '../../tools/FileReadTool';
+import { BasicMetricsCollector } from '../../monitoring/BasicMetricsCollector';
 
 export interface GRPCServiceConfig {
   port: number;
@@ -12,14 +12,14 @@ export interface GRPCServiceConfig {
 export class GRPCService {
   private server: grpc.Server;
   private config: GRPCServiceConfig;
-  private enhancedTool: EnhancedMCPTool;
-  private metricsCollector: MetricsCollector;
+  private fileReadTool: FileReadTool;
+  private metricsCollector: BasicMetricsCollector;
   
   constructor(config: GRPCServiceConfig) {
     this.config = config;
     this.server = new grpc.Server();
-    this.enhancedTool = new EnhancedMCPTool();
-    this.metricsCollector = new MetricsCollector();
+    this.fileReadTool = new FileReadTool();
+    this.metricsCollector = new BasicMetricsCollector();
     this.setupServices();
   }
   
@@ -63,11 +63,16 @@ export class GRPCService {
     try {
       const { tool_name, input_data } = call.request;
       
+      // 目前只支持file_read工具
+      if (tool_name !== 'file_read') {
+        throw new Error(`不支持的工具: ${tool_name}`);
+      }
+      
       // 解析输入数据
       const input = JSON.parse(input_data.toString());
       
       // 执行工具
-      const result = await this.enhancedTool.execute(input);
+      const result = await this.fileReadTool.execute(input);
       
       const executionTime = Date.now() - startTime;
       
@@ -82,18 +87,19 @@ export class GRPCService {
         result_data: Buffer.from(JSON.stringify(result)),
         execution_time_ms: executionTime
       });
-    } catch (error) {
+    } catch (error: unknown) {
       const executionTime = Date.now() - startTime;
+      const err = error as Error;
       
       this.metricsCollector.recordMetric('grpc_tool_execution_time', executionTime, {
         tool: call.request.tool_name,
         success: 'false',
-        error: error instanceof Error ? error.message : 'unknown'
+        error: err.message
       });
       
       callback(null, {
         success: false,
-        error_message: error instanceof Error ? error.message : 'Unknown error',
+        error_message: err.message,
         execution_time_ms: executionTime
       });
     }

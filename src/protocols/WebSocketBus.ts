@@ -88,5 +88,7 @@ export class WebSocketBus {
       this.ws = null;
       this.isConnected = false;
     }
+    // 清空消息队列
+    this.messageQueue = [];
   }
 }

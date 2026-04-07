@@ -41,33 +41,35 @@ export class FileWriteTool extends EnhancedMCPTool {
   protected async executeInternal(input: FileWriteInput): Promise<FileWriteOutput> {
     const { filePath, content, encoding = "utf8" } = input;
     
-    // 输入验证
+    // 验证输入
     if (!filePath || typeof filePath !== "string") {
       throw new Error("文件路径必须是非空字符串");
     }
     
-    if (typeof content !== "string") {
-      throw new Error("内容必须是字符串");
+    if (!content || typeof content !== "string") {
+      throw new Error("内容必须是非空字符串");
     }
     
-    // 安全检查
+    // 安全检查：防止路径遍历攻击
     if (filePath.includes("..") || filePath.startsWith("/")) {
       throw new Error("无效的文件路径");
     }
     
     try {
       await fs.writeFile(filePath, content, { encoding: encoding as BufferEncoding });
+      const stats = await fs.stat(filePath);
       
       return {
         success: true,
         filePath,
-        bytesWritten: Buffer.byteLength(content, encoding as BufferEncoding)
+        bytesWritten: stats.size
       };
-    } catch (error) {
-      if (error.code === "EACCES") {
+    } catch (error: unknown) {
+      const err = error as { code?: string; message: string };
+      if (err.code === "EACCES") {
         throw new Error(`没有权限写入文件: ${filePath}`);
       } else {
-        throw new Error(`写入文件失败: ${error.message}`);
+        throw new Error(`写入文件失败: ${err.message}`);
       }
     }
   }
