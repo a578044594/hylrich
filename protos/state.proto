@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package state;
+
+service StateSyncService {
+  // 状态同步方法
+  rpc SyncState (StateUpdateRequest) returns (StateUpdateResponse);
+  rpc GetStates (GetStatesRequest) returns (GetStatesResponse);
+  rpc SubscribeStateUpdates (SubscribeRequest) returns (stream StateUpdate);
+  
+  // 节点发现和管理
+  rpc RegisterNode (NodeInfo) returns (RegistrationResponse);
+  rpc UnregisterNode (NodeId) returns (UnregistrationResponse);
+  rpc DiscoverNodes (DiscoveryRequest) returns (DiscoveryResponse);
+  
+  // 集群状态查询
+  rpc GetClusterStats (ClusterStatsRequest) returns (ClusterStatsResponse);
+}
+
+// 状态更新相关消息
+message StateUpdateRequest {
+  StateUpdate update = 1;
+  string source_node_id = 2;
+}
+
+message StateUpdateResponse {
+  bool success = 1;
+  string message = 2;
+  int64 applied_version = 3;
+}
+
+message GetStatesRequest {
+  string requesting_node_id = 1;
+  repeated string keys = 2; // 可选：指定要获取的键
+}
+
+message GetStatesResponse {
+  repeated StateUpdate states = 1;
+  int64 total_count = 2;
+}
+
+message SubscribeRequest {
+  string node_id = 1;
+  repeated string keys = 2; // 可选：订阅特定键
+}
+
+// 节点管理相关消息
+message NodeInfo {
+  string id = 1;
+  string host = 2;
+  int32 port = 3;
+  string status = 4;
+  repeated string capabilities = 5;
+  int64 last_seen = 6;
+}
+
+message NodeId {
+  string id = 1;
+}
+
+message RegistrationResponse {
+  bool success = 1;
+  string message = 2;
+  string assigned_id = 3; // 如果允许自动分配ID
+}
+
+message UnregistrationResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 节点发现相关消息
+message DiscoveryRequest {
+  string requesting_node_id = 1;
+  int32 max_nodes = 2;
+}
+
+message DiscoveryResponse {
+  repeated NodeInfo nodes = 1;
+  int32 total_nodes = 2;
+}
+
+// 集群状态统计
+message ClusterStatsRequest {
+  string requesting_node_id = 1;
+}
+
+message ClusterStatsResponse {
+  int32 total_nodes = 1;
+  int32 online_nodes = 2;
+  int32 offline_nodes = 3;
+  int64 total_states = 4;
+  int64 total_updates = 5;
+  map<string, int64> state_distribution = 6;
+}
+
+// 状态更新消息（与现有代码兼容）
+message StateUpdate {
+  string key = 1;
+  bytes value = 2; // 使用bytes以支持任意数据类型
+  string node_id = 3;
+  int64 version = 4;
+  int64 timestamp = 5;
+  string data_type = 6; // 可选：json, string, number, boolean
+}

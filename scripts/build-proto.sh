@@ -15,11 +15,14 @@ fi
 # 创建输出目录
 mkdir -p src/generated
 
-# 编译proto文件
-protoc \
-  --plugin=protoc-gen-ts=./node_modules/.bin/protoc-gen-ts \
-  --ts_out=./src/generated \
-  --proto_path=./protos \
-  ./protos/agent.proto
+# 编译所有proto文件
+for proto_file in ./protos/*.proto; do
+    echo "Compiling $proto_file..."
+    protoc \
+      --plugin=protoc-gen-ts=./node_modules/.bin/protoc-gen-ts \
+      --ts_out=./src/generated \
+      --proto_path=./protos \
+      "$proto_file"
+done
 
 echo "Proto compilation completed!"
