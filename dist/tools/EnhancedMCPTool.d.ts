@@ -14,9 +14,9 @@ export declare abstract class EnhancedMCPTool extends Tool {
     private addToHistory;
     getExecutionHistory(): MCPExecutionMetrics[];
     getPerformanceReport(): {
-        totalExecutions: number;
+        totalExecutions: any;
         successRate: number;
-        averageExecutionTime: number;
+        averageExecutionTime: any;
         recentHistory: MCPExecutionMetrics[];
     };
 }

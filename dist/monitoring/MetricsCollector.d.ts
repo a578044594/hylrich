@@ -1,44 +1,28 @@
-import { EventEmitter } from 'events';
-export interface MetricData {
+export interface Metric {
     name: string;
     value: number;
-    unit?: string;
     timestamp: number;
     tags?: Record<string, any>;
 }
-export interface MetricStats {
-    count: number;
-    sum: number;
-    average: number;
-    min: number;
-    max: number;
-    last: number;
-}
 export interface PerformanceStats {
-    toolExecutionTime: MetricStats[];
+    totalExecutions: number;
+    errorCount: number;
     errorRate: number;
     successRate: number;
-    totalExecutions: number;
-    errorExecutions: number;
+    toolExecutionTime: number[];
 }
-export declare class MetricsCollector extends EventEmitter {
+export declare class MetricsCollector {
     private metrics;
-    private performanceStats;
+    private executionCount;
+    private errorCount;
+    private alertManager;
     constructor();
-    start(): void;
-    stop(): void;
     recordMetric(name: string, value: number, tags?: Record<string, any>, unit?: string): void;
-    private updatePerformanceStats;
-    getMetricStats(name: string): MetricStats;
-    getPerformanceStats(): PerformanceStats;
-    configureAlert(metricName: string, config: {
-        threshold: number;
-        severity: 'info' | 'warning' | 'critical';
-        message: string;
-        cooldown: number;
-    }): void;
     recordError(): void;
-    clearOldData(ageInMs: number): void;
+    recordSuccess(): void;
+    configureAlert(metricName: string, type: 'warning' | 'critical', threshold: number, cooldown?: number): void;
+    getPerformanceStats(): PerformanceStats;
+    exportMetrics(): Metric[];
+    clearOldData(maxAge: number): void;
     reset(): void;
-    exportMetrics(): MetricData[];
 }

@@ -1,14 +1,12 @@
-import * as grpc from '@grpc/grpc-js';
-export interface GrpcServerConfig {
-    host: string;
+import { EventEmitter } from '../../core/EventEmitter';
+export interface GrpcConfig {
     port: number;
-    credentials?: grpc.ServerCredentials;
 }
-export declare class GrpcProtocol {
-    private server;
+export declare class GrpcProtocol extends EventEmitter {
     private config;
-    constructor(config: GrpcServerConfig);
+    private isRunning;
+    constructor(config: GrpcConfig);
     start(): Promise<void>;
     stop(): Promise<void>;
-    addService(service: grpc.ServiceDefinition, implementation: grpc.UntypedServiceImplementation): void;
+    isRunning(): boolean;
 }

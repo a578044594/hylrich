@@ -1,67 +1,23 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
+// Hylrich项目主入口
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HylrichCore = void 0;
+exports.AgentSystem = exports.EnhancedMCPTool = exports.GrpcClient = exports.GrpcProtocol = exports.WebSocketBus = void 0;
+exports.start = start;
 const WebSocketBus_1 = require("./protocols/WebSocketBus");
-__exportStar(require("./core/Tool"), exports);
-__exportStar(require("./protocols/WebSocketBus"), exports);
-__exportStar(require("./tools/EnhancedMCPTool"), exports);
-class HylrichCore {
-    constructor() {
-        this.tools = new Map();
-        this.wsBus = null;
-        console.log("🚀 Hylrich AI Agent管理系统初始化");
-    }
-    registerTool(tool) {
-        this.tools.set(tool.name, tool);
-        console.log(`✅ 注册工具: ${tool.name}`);
-    }
-    async connectWebSocket(config) {
-        this.wsBus = new WebSocketBus_1.WebSocketBus(config);
-        await this.wsBus.connect();
-        console.log("✅ WebSocket连接已建立");
-    }
-    async executeTool(toolName, input) {
-        const tool = this.tools.get(toolName);
-        if (!tool) {
-            throw new Error(`工具未找到: ${toolName}`);
-        }
-        console.log(`🛠️ 执行工具: ${toolName}`);
-        const result = await tool.execute(input);
-        // 发送执行结果到WebSocket
-        if (this.wsBus) {
-            this.wsBus.send({
-                type: "tool_execution_result",
-                tool: toolName,
-                result: result,
-                timestamp: Date.now()
-            });
-        }
-        return result;
-    }
-    getToolStats(toolName) {
-        const tool = this.tools.get(toolName);
-        return tool ? tool.getPerformanceReport() : null;
-    }
-    shutdown() {
-        if (this.wsBus) {
-            this.wsBus.disconnect();
-        }
-        console.log("🛑 Hylrich系统已关闭");
-    }
+Object.defineProperty(exports, "WebSocketBus", { enumerable: true, get: function () { return WebSocketBus_1.WebSocketBus; } });
+const GrpcProtocol_1 = require("./protocols/grpc/GrpcProtocol");
+Object.defineProperty(exports, "GrpcProtocol", { enumerable: true, get: function () { return GrpcProtocol_1.GrpcProtocol; } });
+const GrpcClient_1 = require("./protocols/grpc/GrpcClient");
+Object.defineProperty(exports, "GrpcClient", { enumerable: true, get: function () { return GrpcClient_1.GrpcClient; } });
+const EnhancedMCPTool_1 = require("./protocols/EnhancedMCPTool");
+Object.defineProperty(exports, "EnhancedMCPTool", { enumerable: true, get: function () { return EnhancedMCPTool_1.EnhancedMCPTool; } });
+const AgentSystem_1 = require("./services/AgentSystem");
+Object.defineProperty(exports, "AgentSystem", { enumerable: true, get: function () { return AgentSystem_1.AgentSystem; } });
+// 启动系统
+function start() {
+    console.log('Hylrich系统启动中...');
+    const agentSystem = new AgentSystem_1.AgentSystem();
+    agentSystem.start();
+    console.log('Hylrich系统启动完成');
 }
-exports.HylrichCore = HylrichCore;
 //# sourceMappingURL=index.js.map

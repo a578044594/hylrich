@@ -1,13 +1,10 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WebSocketBus = void 0;
-const ws_1 = __importDefault(require("ws"));
-class WebSocketBus {
+const EventEmitter_1 = require("../core/EventEmitter");
+class WebSocketBus extends EventEmitter_1.EventEmitter {
     constructor(config) {
-        this.config = config;
+        super();
         this.ws = null;
         this.reconnectAttempts = 0;
         this.messageQueue = [];
@@ -15,28 +12,33 @@ class WebSocketBus {
         this.config = {
             reconnectInterval: 5000,
             maxReconnectAttempts: 10,
-            heartbeatInterval: 30000,
             ...config
         };
     }
-    async connect() {
+    connect() {
         return new Promise((resolve, reject) => {
             try {
-                this.ws = new ws_1.default(this.config.url);
-                this.ws.on("open", () => {
+                this.ws = new WebSocket(this.config.url);
+                this.ws.onopen = () => {
                     this.isConnected = true;
                     this.reconnectAttempts = 0;
                     this.processMessageQueue();
-                    this.startHeartbeat();
+                    this.emit('connected');
                     resolve();
-                });
-                this.ws.on("close", () => {
+                };
+                this.ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    this.emit('message', message);
+                };
+                this.ws.onclose = () => {
                     this.isConnected = false;
+                    this.emit('disconnected');
                     this.handleReconnect();
-                });
-                this.ws.on("error", (error) => {
+                };
+                this.ws.onerror = (error) => {
+                    this.emit('error', error);
                     reject(error);
-                });
+                };
             }
             catch (error) {
                 reject(error);
@@ -65,21 +67,19 @@ class WebSocketBus {
             }, this.config.reconnectInterval);
         }
     }
-    startHeartbeat() {
-        setInterval(() => {
-            if (this.isConnected) {
-                this.send({ type: "heartbeat", timestamp: Date.now() });
-            }
-        }, this.config.heartbeatInterval);
-    }
     disconnect() {
         if (this.ws) {
             this.ws.close();
             this.ws = null;
-            this.isConnected = false;
         }
-        // 清空消息队列
+        this.isConnected = false;
         this.messageQueue = [];
+    }
+    getConnectionStatus() {
+        return {
+            connected: this.isConnected,
+            reconnectAttempts: this.reconnectAttempts
+        };
     }
 }
 exports.WebSocketBus = WebSocketBus;

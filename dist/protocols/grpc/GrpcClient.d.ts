@@ -1,20 +1,14 @@
-import * as grpc from '@grpc/grpc-js';
-import { ToolRequest, ToolResponse, MetricsRequest, MetricsResponse, HealthRequest, HealthResponse, MetricUpdate, HealthUpdate } from '../../generated/agent';
+import { EventEmitter } from '../../core/EventEmitter';
 export interface GrpcClientConfig {
     host: string;
     port: number;
-    credentials?: grpc.ChannelCredentials;
 }
-export declare class GrpcClient {
+export declare class GrpcClient extends EventEmitter {
     private config;
-    private client;
+    private isConnected;
     constructor(config: GrpcClientConfig);
-    private setupClient;
-    executeTool(request: ToolRequest): Promise<ToolResponse>;
-    getMetrics(request: MetricsRequest): Promise<MetricsResponse>;
-    healthCheck(request: HealthRequest): Promise<HealthResponse>;
-    streamTools(requests: AsyncIterable<ToolRequest>): AsyncIterable<ToolResponse>;
-    streamMetrics(request: MetricsRequest): AsyncIterable<MetricUpdate>;
-    streamHealth(request: HealthRequest): AsyncIterable<HealthUpdate>;
-    close(): void;
+    connect(): Promise<void>;
+    disconnect(): Promise<void>;
+    executeTool(toolName: string, input: any): Promise<any>;
+    isConnected(): boolean;
 }
