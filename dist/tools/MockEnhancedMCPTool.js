@@ -1,33 +1,22 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MockEnhancedMCPTool = void 0;
-class MockEnhancedMCPTool extends EnhancedMCPTool {
+const EnhancedMCPTool_1 = require("./EnhancedMCPTool");
+class MockEnhancedMCPTool extends EnhancedMCPTool_1.EnhancedMCPTool {
     constructor() {
-        super();
-        this.name = 'MockEnhancedMCPTool';
-        this.description = 'Mock MCP tool for testing';
+        super(...arguments);
+        this.name = 'mock_tool';
+        this.description = '模拟工具';
         this.parameters = {
             type: 'object',
             properties: {
-                input: {
-                    type: 'string',
-                    description: 'Input data for the tool'
-                }
+                message: { type: 'string', description: '输入消息' }
             },
-            required: ['input']
+            required: ['message']
         };
     }
-    async execute(input) {
-        console.log('Mock MCP tool executed with input:', input);
-        return {
-            result: input,
-            success: true,
-            metrics: {
-                executionTime: 100,
-                memoryUsage: 512,
-                errorRate: 0
-            }
-        };
+    async performExecution(input) {
+        return `模拟执行结果: ${input.message}`;
     }
 }
 exports.MockEnhancedMCPTool = MockEnhancedMCPTool;

@@ -1,55 +1,58 @@
-import { EventEmitter } from '../../core/EventEmitter';
+import { credentials, Metadata, ServiceError } from '@grpc/grpc-js';
+import { Tool } from '../../core/Tool';
 
-export interface GrpcClientConfig {
-  host: string;
-  port: number;
-}
+export class GrpcClient {
+  private client: any;
+  private target: string;
+  private _isConnected: boolean;
 
-export class GrpcClient extends EventEmitter {
-  private config: GrpcClientConfig;
-  private isConnected = false;
-
-  constructor(config: GrpcClientConfig) {
-    super();
-    this.config = config;
+  constructor(target: string = 'localhost:50051') {
+    this.target = target;
+    this._isConnected = false;
+    this.client = null;
   }
 
-  async connect(): Promise<void> {
-    if (this.isConnected) {
-      throw new Error('GrpcClient is already connected');
-    }
-
-    // 模拟gRPC客户端连接
-    console.log(`gRPC client connecting to ${this.config.host}:${this.config.port}`);
-    
-    this.isConnected = true;
-    this.emit('connected');
+  public get isConnected(): boolean {
+    return this._isConnected;
   }
 
-  async disconnect(): Promise<void> {
-    if (!this.isConnected) {
-      return;
+  public async connect(): Promise<void> {
+    try {
+      console.log(`🔗 连接gRPC服务: ${this.target}`);
+      this._isConnected = true;
+    } catch (error) {
+      console.error('❌ gRPC连接失败:', error);
+      throw error;
     }
-
-    this.isConnected = false;
-    console.log('gRPC client disconnected');
-    this.emit('disconnected');
   }
 
-  async executeTool(toolName: string, input: any): Promise<any> {
-    if (!this.isConnected) {
-      throw new Error('GrpcClient is not connected');
+  public async disconnect(): Promise<void> {
+    this._isConnected = false;
+    console.log('🔌 gRPC连接已断开');
+  }
+
+  public async executeTool(toolName: string, input: any): Promise<any> {
+    if (!this._isConnected) {
+      throw new Error('gRPC客户端未连接');
     }
 
-    // 模拟工具执行
+    console.log(`🛠️ 执行工具: ${toolName}`);
+    return { result: `模拟执行结果: ${toolName}` };
+  }
+
+  public async healthCheck(): Promise<any> {
+    return { healthy: true, status: '服务正常' };
+  }
+
+  public async getMetrics(): Promise<any> {
+    return { metrics: {} };
+  }
+
+  public async getSystemStats(): Promise<any> {
     return {
-      success: true,
-      result: `Tool ${toolName} executed via gRPC`,
-      timestamp: Date.now()
+      cpu_usage: 0.1,
+      memory_usage: 0.2,
+      active_connections: 0
     };
-  }
-
-  isConnected(): boolean {
-    return this.isConnected;
   }
 }

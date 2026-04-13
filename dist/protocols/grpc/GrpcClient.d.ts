@@ -1,14 +1,13 @@
-import { EventEmitter } from '../../core/EventEmitter';
-export interface GrpcClientConfig {
-    host: string;
-    port: number;
-}
-export declare class GrpcClient extends EventEmitter {
-    private config;
-    private isConnected;
-    constructor(config: GrpcClientConfig);
+export declare class GrpcClient {
+    private client;
+    private target;
+    private _isConnected;
+    constructor(target?: string);
+    get isConnected(): boolean;
     connect(): Promise<void>;
     disconnect(): Promise<void>;
     executeTool(toolName: string, input: any): Promise<any>;
-    isConnected(): boolean;
+    healthCheck(): Promise<any>;
+    getMetrics(): Promise<any>;
+    getSystemStats(): Promise<any>;
 }

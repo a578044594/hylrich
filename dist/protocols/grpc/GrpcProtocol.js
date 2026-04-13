@@ -1,33 +1,68 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GrpcProtocol = void 0;
-const EventEmitter_1 = require("../../core/EventEmitter");
-class GrpcProtocol extends EventEmitter_1.EventEmitter {
-    constructor(config) {
-        super();
-        this.isRunning = false;
-        this.config = config;
+const GrpcClient_1 = require("./GrpcClient");
+class GrpcProtocol {
+    constructor(target) {
+        this.client = new GrpcClient_1.GrpcClient(target);
+        this._isRunning = false;
+    }
+    get isRunning() {
+        return this._isRunning;
     }
     async start() {
-        if (this.isRunning) {
-            throw new Error('GrpcProtocol is already running');
-        }
-        this.isRunning = true;
-        // 模拟gRPC服务器启动
-        console.log(`gRPC server starting on port ${this.config.port}`);
-        // 实际实现需要grpc库
-        this.emit('started');
-    }
-    async stop() {
-        if (!this.isRunning) {
+        if (this._isRunning) {
+            console.log('⚠️ gRPC协议已在运行');
             return;
         }
-        this.isRunning = false;
-        console.log('gRPC server stopped');
-        this.emit('stopped');
+        try {
+            await this.client.connect();
+            this._isRunning = true;
+            console.log('🚀 gRPC协议已启动');
+        }
+        catch (error) {
+            console.error('❌ gRPC协议启动失败:', error);
+            throw error;
+        }
     }
-    isRunning() {
-        return this.isRunning;
+    async stop() {
+        if (!this._isRunning) {
+            console.log('⚠️ gRPC协议未运行');
+            return;
+        }
+        try {
+            await this.client.disconnect();
+            this._isRunning = false;
+            console.log('🛑 gRPC协议已停止');
+        }
+        catch (error) {
+            console.error('❌ gRPC协议停止失败:', error);
+            throw error;
+        }
+    }
+    async executeTool(toolName, input) {
+        if (!this._isRunning) {
+            throw new Error('gRPC协议未运行');
+        }
+        return await this.client.executeTool(toolName, input);
+    }
+    async healthCheck() {
+        if (!this._isRunning) {
+            throw new Error('gRPC协议未运行');
+        }
+        return await this.client.healthCheck();
+    }
+    async getMetrics() {
+        if (!this._isRunning) {
+            throw new Error('gRPC协议未运行');
+        }
+        return await this.client.getMetrics();
+    }
+    async getSystemStats() {
+        if (!this._isRunning) {
+            throw new Error('gRPC协议未运行');
+        }
+        return await this.client.getSystemStats();
     }
 }
 exports.GrpcProtocol = GrpcProtocol;

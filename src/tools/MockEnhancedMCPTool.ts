@@ -1,30 +1,17 @@
-export class MockEnhancedMCPTool extends EnhancedMCPTool {
-  constructor() {
-    super();
-    this.name = 'MockEnhancedMCPTool';
-    this.description = 'Mock MCP tool for testing';
-    this.parameters = {
-      type: 'object',
-      properties: {
-        input: {
-          type: 'string',
-          description: 'Input data for the tool'
-        }
-      },
-      required: ['input']
-    };
-  }
+import { EnhancedMCPTool } from './EnhancedMCPTool';
 
-  async execute(input: any): Promise<any> {
-    console.log('Mock MCP tool executed with input:', input);
-    return {
-      result: input,
-      success: true,
-      metrics: {
-        executionTime: 100,
-        memoryUsage: 512,
-        errorRate: 0
-      }
-    };
+export class MockEnhancedMCPTool extends EnhancedMCPTool {
+  public readonly name = 'mock_tool';
+  public readonly description = '模拟工具';
+  public readonly parameters: ToolInputJSONSchema = {
+    type: 'object',
+    properties: {
+      message: { type: 'string', description: '输入消息' }
+    },
+    required: ['message']
+  } as const;
+
+  protected async performExecution(input: { message: string }): Promise<string> {
+    return `模拟执行结果: ${input.message}`;
   }
 }

@@ -1,104 +1,58 @@
-import { EventEmitter } from '../core/EventEmitter';
-import { WebSocketBus } from '../protocols/WebSocketBus';
 import { GrpcProtocol } from '../protocols/grpc/GrpcProtocol';
-import { EnhancedMCPTool } from '../protocols/EnhancedMCPTool';
+import { WebSocketBus } from '../protocols/websocket/WebSocketBus';
 
-export interface AgentSystemConfig {
-  webSocketUrl?: string;
-  grpcPort?: number;
-}
+export class AgentSystem {
+  private grpcProtocol: GrpcProtocol;
+  private websocketBus: WebSocketBus;
 
-export class AgentSystem extends EventEmitter {
-  private webSocketBus?: WebSocketBus;
-  private grpcProtocol?: GrpcProtocol;
-  private mcpTool?: EnhancedMCPTool;
-  private isRunning = false;
-
-  constructor(private config: AgentSystemConfig = {}) {
-    super();
+  constructor() {
+    this.grpcProtocol = new GrpcProtocol();
+    this.websocketBus = new WebSocketBus();
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning) {
-      throw new Error('AgentSystem is already running');
-    }
-
-    this.isRunning = true;
+  public async start(): Promise<void> {
+    console.log('🚀 启动Agent系统...');
     
-    // 初始化WebSocket总线
-    if (this.config.webSocketUrl) {
-      this.webSocketBus = new WebSocketBus({
-        url: this.config.webSocketUrl
-      });
-      
-      await this.webSocketBus.connect();
-      this.webSocketBus.on('message', (message) => {
-        this.handleWebSocketMessage(message);
-      });
-    }
-
-    // 初始化gRPC协议
-    if (this.config.grpcPort) {
-      this.grpcProtocol = new GrpcProtocol({
-        port: this.config.grpcPort
-      });
-      await this.grpcProtocol.start();
-    }
-
-    // 初始化MCP工具
-    this.mcpTool = new EnhancedMCPTool();
-
-    this.emit('started');
-    console.log('AgentSystem started successfully');
-  }
-
-  async stop(): Promise<void> {
-    if (!this.isRunning) {
-      return;
-    }
-
-    this.isRunning = false;
+    // 启动gRPC协议
+    await this.grpcProtocol.start();
     
-    if (this.webSocketBus) {
-      this.webSocketBus.disconnect();
-    }
+    // 启动WebSocket消息总线
+    await this.websocketBus.start();
     
-    if (this.grpcProtocol) {
-      await this.grpcProtocol.stop();
-    }
-
-    this.emit('stopped');
-    console.log('AgentSystem stopped');
+    console.log('✅ Agent系统启动完成');
   }
 
-  private handleWebSocketMessage(message: any): void {
-    // 处理WebSocket消息
-    this.emit('websocket_message', message);
+  public async stop(): Promise<void> {
+    console.log('🛑 停止Agent系统...');
+    
+    await this.grpcProtocol.stop();
+    await this.websocketBus.stop();
+    
+    console.log('✅ Agent系统已停止');
   }
 
-  getStatus(): {
-    running: boolean;
-    webSocketConnected: boolean;
+  public async sendMessage(message: any): Promise<void> {
+    console.log('📨 发送消息:', message);
+    // 通过WebSocket总线发送消息
+    await this.websocketBus.send(message);
+  }
+
+  public async executeTool(toolName: string, input: any): Promise<any> {
+    console.log(`🛠️ 执行工具: ${toolName}`);
+    return await this.grpcProtocol.executeTool(toolName, input);
+  }
+
+  public async healthCheck(): Promise<any> {
+    return await this.grpcProtocol.healthCheck();
+  }
+
+  public getStatus(): {
     grpcRunning: boolean;
+    websocketRunning: boolean;
   } {
     return {
-      running: this.isRunning,
-      webSocketConnected: this.webSocketBus?.getConnectionStatus().connected || false,
-      grpcRunning: this.grpcProtocol?.isRunning() || false
-    };
-  }
-
-  async executeTool(toolName: string, input: any): Promise<any> {
-    if (!this.isRunning) {
-      throw new Error('AgentSystem is not running');
-    }
-
-    // 这里可以实现工具执行逻辑
-    // 暂时返回模拟结果
-    return {
-      success: true,
-      result: `Tool ${toolName} executed successfully`,
-      timestamp: Date.now()
+      grpcRunning: this.grpcProtocol.isRunning,
+      websocketRunning: this.websocketBus.isRunning
     };
   }
 }

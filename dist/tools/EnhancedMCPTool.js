@@ -4,52 +4,62 @@ exports.EnhancedMCPTool = void 0;
 const Tool_1 = require("../core/Tool");
 class EnhancedMCPTool extends Tool_1.Tool {
     constructor() {
-        super(...arguments);
+        super();
         this.executionHistory = [];
-        this.maxHistorySize = 50;
+        this.executionCount = 0;
+    }
+    recordExecution(metrics) {
+        this.executionHistory.push(metrics);
+        this.executionCount++;
+        // 保持历史记录大小
+        if (this.executionHistory.length > 50) {
+            this.executionHistory.shift();
+        }
+    }
+    getPerformanceStats() {
+        const successfulExecutions = this.executionHistory.filter(m => m.success).length;
+        const failedExecutions = this.executionHistory.filter(m => m.success === false).length;
+        const totalTime = this.executionHistory.reduce((sum, m) => sum + (m.executionTime || 0), 0);
+        return {
+            totalExecutions: this.executionCount,
+            errorCount: failedExecutions,
+            errorRate: this.executionCount > 0 ? (failedExecutions / this.executionCount) * 100 : 0,
+            successRate: this.executionCount > 0 ? (successfulExecutions / this.executionCount) * 100 : 0,
+            averageExecutionTime: this.executionCount > 0 ? totalTime / this.executionCount : 0
+        };
     }
     async execute(input) {
-        const metrics = {
-            startTime: Date.now(),
-            memoryUsage: process.memoryUsage().heapUsed
-        };
+        const startTime = Date.now();
+        let success;
+        let error;
         try {
-            const result = await this.executeInternal(input);
-            metrics.endTime = Date.now();
-            metrics.success = true;
-            this.recordExecution(metrics.startTime, metrics.endTime);
-            this.addToHistory(metrics);
+            console.log(`🔧 执行增强MCP工具: ${this.name}`);
+            const result = await this.performExecution(input);
+            success = true;
+            const endTime = Date.now();
+            this.recordExecution({
+                startTime,
+                endTime,
+                success,
+                executionTime: endTime - startTime
+            });
+            console.log(`✅ 工具执行完成: ${this.name}`);
             return result;
         }
-        catch (error) {
-            metrics.endTime = Date.now();
-            metrics.success = false;
-            metrics.error = error;
-            this.addToHistory(metrics);
-            throw error;
+        catch (err) {
+            success = false;
+            error = err instanceof Error ? err.message : String(err);
+            const endTime = Date.now();
+            this.recordExecution({
+                startTime,
+                endTime,
+                success,
+                error,
+                executionTime: endTime - startTime
+            });
+            console.error(`❌ 工具执行失败: ${this.name}`, error);
+            throw err;
         }
-    }
-    addToHistory(metrics) {
-        this.executionHistory.unshift(metrics);
-        if (this.executionHistory.length > this.maxHistorySize) {
-            this.executionHistory.pop();
-        }
-    }
-    getExecutionHistory() {
-        return [...this.executionHistory];
-    }
-    getPerformanceReport() {
-        const stats = this.getPerformanceStats();
-        const successful = this.executionHistory.filter(m => m.success).length;
-        const failed = this.executionHistory.filter(m => !m.success).length;
-        return {
-            totalExecutions: stats.executionCount,
-            successRate: stats.executionCount > 0
-                ? (successful / stats.executionCount) * 100
-                : 0,
-            averageExecutionTime: stats.averageExecutionTime,
-            recentHistory: this.executionHistory.slice(0, 10)
-        };
     }
 }
 exports.EnhancedMCPTool = EnhancedMCPTool;

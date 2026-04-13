@@ -1,4 +1,4 @@
-import { AgentService } from 'grpc';
+import { Server, ServerCredentials } from '@grpc/grpc-js';
 
 export interface IAgentService {
   executeTool: (call: any, callback: any) => void;

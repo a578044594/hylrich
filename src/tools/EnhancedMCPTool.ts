@@ -1,64 +1,88 @@
-import { Tool } from "../core/Tool";
+import { Tool, ToolInputJSONSchema } from '../core/Tool';
 
 export interface MCPExecutionMetrics {
   startTime: number;
   endTime?: number;
   success?: boolean;
-  error?: any;
-  memoryUsage?: number;
+  error?: string;
+  executionTime?: number;
 }
 
 export abstract class EnhancedMCPTool extends Tool {
-  private executionHistory: MCPExecutionMetrics[] = [];
-  private maxHistorySize = 50;
-  
-  async execute(input: any): Promise<any> {
-    const metrics: MCPExecutionMetrics = {
-      startTime: Date.now(),
-      memoryUsage: process.memoryUsage().heapUsed
-    };
+  protected executionHistory: MCPExecutionMetrics[] = [];
+  protected executionCount: number = 0;
+
+  constructor() {
+    super();
+  }
+
+  protected recordExecution(metrics: MCPExecutionMetrics): void {
+    this.executionHistory.push(metrics);
+    this.executionCount++;
     
-    try {
-      const result = await this.executeInternal(input);
-      metrics.endTime = Date.now();
-      metrics.success = true;
-      this.recordExecution(metrics.startTime, metrics.endTime);
-      this.addToHistory(metrics);
-      return result;
-    } catch (error) {
-      metrics.endTime = Date.now();
-      metrics.success = false;
-      metrics.error = error;
-      this.addToHistory(metrics);
-      throw error;
+    // 保持历史记录大小
+    if (this.executionHistory.length > 50) {
+      this.executionHistory.shift();
     }
   }
-  
-  protected abstract executeInternal(input: any): Promise<any>;
-  
-  private addToHistory(metrics: MCPExecutionMetrics): void {
-    this.executionHistory.unshift(metrics);
-    if (this.executionHistory.length > this.maxHistorySize) {
-      this.executionHistory.pop();
-    }
-  }
-  
-  public getExecutionHistory(): MCPExecutionMetrics[] {
-    return [...this.executionHistory];
-  }
-  
-  public getPerformanceReport() {
-    const stats = this.getPerformanceStats();
-    const successful = this.executionHistory.filter(m => m.success).length;
-    const failed = this.executionHistory.filter(m => !m.success).length;
+
+  public getPerformanceStats(): {
+    totalExecutions: number;
+    errorCount: number;
+    errorRate: number;
+    successRate: number;
+    averageExecutionTime: number;
+  } {
+    const successfulExecutions = this.executionHistory.filter(m => m.success).length;
+    const failedExecutions = this.executionHistory.filter(m => m.success === false).length;
+    const totalTime = this.executionHistory.reduce((sum, m) => sum + (m.executionTime || 0), 0);
     
     return {
-      totalExecutions: stats.executionCount,
-      successRate: stats.executionCount > 0 
-        ? (successful / stats.executionCount) * 100 
-        : 0,
-      averageExecutionTime: stats.averageExecutionTime,
-      recentHistory: this.executionHistory.slice(0, 10)
+      totalExecutions: this.executionCount,
+      errorCount: failedExecutions,
+      errorRate: this.executionCount > 0 ? (failedExecutions / this.executionCount) * 100 : 0,
+      successRate: this.executionCount > 0 ? (successfulExecutions / this.executionCount) * 100 : 0,
+      averageExecutionTime: this.executionCount > 0 ? totalTime / this.executionCount : 0
     };
+  }
+
+  protected abstract performExecution(input: any): Promise<any>;
+
+  public async execute(input: any): Promise<any> {
+    const startTime = Date.now();
+    let success: boolean | undefined;
+    let error: string | undefined;
+
+    try {
+      console.log(`🔧 执行增强MCP工具: ${this.name}`);
+      const result = await this.performExecution(input);
+      success = true;
+      
+      const endTime = Date.now();
+      this.recordExecution({
+        startTime,
+        endTime,
+        success,
+        executionTime: endTime - startTime
+      });
+
+      console.log(`✅ 工具执行完成: ${this.name}`);
+      return result;
+    } catch (err) {
+      success = false;
+      error = err instanceof Error ? err.message : String(err);
+      
+      const endTime = Date.now();
+      this.recordExecution({
+        startTime,
+        endTime,
+        success,
+        error,
+        executionTime: endTime - startTime
+      });
+
+      console.error(`❌ 工具执行失败: ${this.name}`, error);
+      throw err;
+    }
   }
 }

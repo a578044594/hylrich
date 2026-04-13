@@ -1,43 +1,48 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GrpcClient = void 0;
-const EventEmitter_1 = require("../../core/EventEmitter");
-class GrpcClient extends EventEmitter_1.EventEmitter {
-    constructor(config) {
-        super();
-        this.isConnected = false;
-        this.config = config;
+class GrpcClient {
+    constructor(target = 'localhost:50051') {
+        this.target = target;
+        this._isConnected = false;
+        this.client = null;
+    }
+    get isConnected() {
+        return this._isConnected;
     }
     async connect() {
-        if (this.isConnected) {
-            throw new Error('GrpcClient is already connected');
+        try {
+            console.log(`🔗 连接gRPC服务: ${this.target}`);
+            this._isConnected = true;
         }
-        // 模拟gRPC客户端连接
-        console.log(`gRPC client connecting to ${this.config.host}:${this.config.port}`);
-        this.isConnected = true;
-        this.emit('connected');
+        catch (error) {
+            console.error('❌ gRPC连接失败:', error);
+            throw error;
+        }
     }
     async disconnect() {
-        if (!this.isConnected) {
-            return;
-        }
-        this.isConnected = false;
-        console.log('gRPC client disconnected');
-        this.emit('disconnected');
+        this._isConnected = false;
+        console.log('🔌 gRPC连接已断开');
     }
     async executeTool(toolName, input) {
-        if (!this.isConnected) {
-            throw new Error('GrpcClient is not connected');
+        if (!this._isConnected) {
+            throw new Error('gRPC客户端未连接');
         }
-        // 模拟工具执行
-        return {
-            success: true,
-            result: `Tool ${toolName} executed via gRPC`,
-            timestamp: Date.now()
-        };
+        console.log(`🛠️ 执行工具: ${toolName}`);
+        return { result: `模拟执行结果: ${toolName}` };
     }
-    isConnected() {
-        return this.isConnected;
+    async healthCheck() {
+        return { healthy: true, status: '服务正常' };
+    }
+    async getMetrics() {
+        return { metrics: {} };
+    }
+    async getSystemStats() {
+        return {
+            cpu_usage: 0.1,
+            memory_usage: 0.2,
+            active_connections: 0
+        };
     }
 }
 exports.GrpcClient = GrpcClient;

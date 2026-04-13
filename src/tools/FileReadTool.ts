@@ -1,29 +1,23 @@
-import { EnhancedMCPTool } from '../tools/EnhancedMCPTool';
-import { ToolError } from '../core/ToolError';
+import { EnhancedMCPTool } from './EnhancedMCPTool';
+import { promises as fs } from 'fs';
 
 export class FileReadTool extends EnhancedMCPTool {
-  async executeInternal(params: any): Promise<any> {
-    // 验证文件路径
-    if (!params.path || typeof params.path !== "string") {
-      throw new ToolError("文件路径必须是非空字符串");
-    }
+  public readonly name = 'file_read';
+  public readonly description = '读取文件内容';
+  public readonly parameters: ToolInputJSONSchema = {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: '文件路径' }
+    },
+    required: ['path'] // 现在是字符串数组
+  } as const;
 
-    // 安全检查：防止路径遍历攻击
-    const normalizedPath = params.path.replace(/\\/g, '/');
-    if (normalizedPath.includes('..') || normalizedPath.startsWith('.')) {
-      throw new ToolError("无效的文件路径");
-    }
-
-    // 读取文件
+  protected async performExecution(input: { path: string }): Promise<string> {
     try {
-      const fs = require('fs').promises;
-      const content = await fs.readFile(params.path, 'utf8');
-      return {
-        success: true,
-        content: content
-      };
+      const content = await fs.readFile(input.path, 'utf-8');
+      return content;
     } catch (error) {
-      throw new ToolError(`文件读取失败: ${error.message}`);
+      throw new Error(`读取文件失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

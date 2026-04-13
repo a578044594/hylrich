@@ -1,4 +1,9 @@
-import { EnhancedMCPTool } from '../tools/EnhancedMCPTool';
+import { EnhancedMCPTool } from './EnhancedMCPTool';
 export declare class FileReadTool extends EnhancedMCPTool {
-    executeInternal(params: any): Promise<any>;
+    readonly name = "file_read";
+    readonly description = "\u8BFB\u53D6\u6587\u4EF6\u5185\u5BB9";
+    readonly parameters: ToolInputJSONSchema;
+    protected performExecution(input: {
+        path: string;
+    }): Promise<string>;
 }

@@ -1,22 +1,14 @@
-import { EventEmitter } from '../core/EventEmitter';
-export interface AgentSystemConfig {
-    webSocketUrl?: string;
-    grpcPort?: number;
-}
-export declare class AgentSystem extends EventEmitter {
-    private config;
-    private webSocketBus?;
-    private grpcProtocol?;
-    private mcpTool?;
-    private isRunning;
-    constructor(config?: AgentSystemConfig);
+export declare class AgentSystem {
+    private grpcProtocol;
+    private websocketBus;
+    constructor();
     start(): Promise<void>;
     stop(): Promise<void>;
-    private handleWebSocketMessage;
-    getStatus(): {
-        running: boolean;
-        webSocketConnected: boolean;
-        grpcRunning: boolean;
-    };
+    sendMessage(message: any): Promise<void>;
     executeTool(toolName: string, input: any): Promise<any>;
+    healthCheck(): Promise<any>;
+    getStatus(): {
+        grpcRunning: boolean;
+        websocketRunning: boolean;
+    };
 }
