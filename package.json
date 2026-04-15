@@ -8,6 +8,7 @@
     "build": "bash scripts/build.sh",
     "dev": "tsc --watch",
     "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:unit": "jest --testPathPattern=unit",
     "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint src/**/*.ts",

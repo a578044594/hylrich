@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 export class FileWriteTool extends EnhancedMCPTool {
   public readonly name = 'file_write';
   public readonly description = '写入文件内容';
-  public readonly parameters: ToolInputJSONSchema = {
+  public readonly parameters: any = {
     type: 'object',
     properties: {
       path: { type: 'string', description: '文件路径' },

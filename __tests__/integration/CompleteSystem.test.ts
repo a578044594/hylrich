@@ -11,7 +11,7 @@ import { EnhancedMCPTool } from '../../src/tools/EnhancedMCPTool';
 describe('Complete System Integration', () => {
   let webSocketBus: WebSocketBus;
   let grpcService: GRPCService;
-  let grpcClient: GrpcClient;
+  let GrpcClient: GrpcClient;
   let fileReadTool: FileReadTool;
   let fileWriteTool: FileWriteTool;
   let mcpTool: EnhancedMCPTool;
@@ -33,7 +33,7 @@ describe('Complete System Integration', () => {
     });
 
     // 初始化gRPC客户端
-    grpcClient = new GrpcClient({
+    GrpcClient = new GrpcClient({
       host: 'localhost',
       port: 50051,
       timeout: 5000
@@ -51,7 +51,7 @@ describe('Complete System Integration', () => {
     // 清理资源
     webSocketBus.disconnect();
     grpcService.stop();
-    grpcClient.disconnect();
+    GrpcClient.disconnect();
   });
 
   test('should perform complete tool execution flow', async () => {
@@ -107,7 +107,7 @@ describe('Complete System Integration', () => {
       parameters: { path: 'test.txt' }
     };
 
-    const result = await grpcClient.executeTool(toolRequest);
+    const result = await GrpcClient.executeTool(toolRequest);
     expect(result.success).toBe(true);
     expect(result.result).toBeDefined();
 
@@ -116,7 +116,7 @@ describe('Complete System Integration', () => {
 
   test('should handle health checks', async () => {
     // 测试健康检查
-    const health = await grpcClient.checkHealth();
+    const health = await GrpcClient.checkHealth();
     expect(health.status).toBe('SERVING');
     expect(health.services).toContain('agent');
 
@@ -125,7 +125,7 @@ describe('Complete System Integration', () => {
 
   test('should handle performance metrics', async () => {
     // 测试性能指标收集
-    const metrics = await grpcClient.getMetrics('tool_execution_time');
+    const metrics = await GrpcClient.getMetrics('tool_execution_time');
     expect(metrics).toBeDefined();
     expect(Array.isArray(metrics)).toBe(true);
 
@@ -139,7 +139,7 @@ describe('Complete System Integration', () => {
       parameters: {}
     };
 
-    const result = await grpcClient.executeTool(invalidRequest);
+    const result = await GrpcClient.executeTool(invalidRequest);
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
 
@@ -148,7 +148,7 @@ describe('Complete System Integration', () => {
 
   test('should support real-time monitoring', async () => {
     // 测试实时监控
-    const monitor = grpcClient.monitorMetrics((metric) => {
+    const monitor = GrpcClient.monitorMetrics((metric) => {
       console.log('Real-time metric:', metric);
     });
 
@@ -181,7 +181,7 @@ describe('Complete System Integration', () => {
 
   test('should provide system statistics', async () => {
     // 测试系统统计
-    const stats = await grpcClient.getSystemStats();
+    const stats = await GrpcClient.getSystemStats();
     
     expect(stats).toBeDefined();
     expect(stats.totalTools).toBeGreaterThan(0);

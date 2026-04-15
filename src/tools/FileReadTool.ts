@@ -4,7 +4,7 @@ import { promises as fs } from 'fs';
 export class FileReadTool extends EnhancedMCPTool {
   public readonly name = 'file_read';
   public readonly description = '读取文件内容';
-  public readonly parameters: ToolInputJSONSchema = {
+  public readonly parameters: any = {
     type: 'object',
     properties: {
       path: { type: 'string', description: '文件路径' }

@@ -3,7 +3,7 @@ import { EnhancedMCPTool } from './EnhancedMCPTool';
 export class MockEnhancedMCPTool extends EnhancedMCPTool {
   public readonly name = 'mock_tool';
   public readonly description = '模拟工具';
-  public readonly parameters: ToolInputJSONSchema = {
+  public readonly parameters: any = {
     type: 'object',
     properties: {
       message: { type: 'string', description: '输入消息' }
