@@ -1,39 +1,36 @@
 import OpenAI from 'openai';
 
-export class OpenAIService {
-  private client: OpenAI;
-  private model: string;
+class OpenAIService {
+  private client: OpenAI | null = null;
 
-  constructor(apiKey?: string, model?: string, baseUrl?: string) {
-    const config: any = {
-      apiKey: apiKey || process.env.OPENAI_API_KEY,
-    };
-    if (baseUrl || process.env.OPENAI_BASE_URL) {
-      config.baseURL = baseUrl || process.env.OPENAI_BASE_URL;
+  constructor() {
+    const apiKey = process.env.OPENAI_API_KEY;
+    const baseURL = process.env.OPENAI_BASE_URL;
+    if (apiKey) {
+      this.client = new OpenAI({
+        apiKey,
+        baseURL: baseURL || undefined
+      });
     }
-    this.client = new OpenAI(config);
-    this.model = model || process.env.LLM_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
   }
 
-  async chat(message: string, systemPrompt?: string): Promise<string> {
-    try {
-      const messages: OpenAI.ChatCompletionMessageParam[] = [];
-      if (systemPrompt) {
-        messages.push({ role: 'system', content: systemPrompt } as OpenAI.ChatCompletionSystemMessageParam);
-      }
-      messages.push({ role: 'user', content: message } as OpenAI.ChatCompletionUserMessageParam);
+  async chat(messages: Array<{role: string; content: string}>, model?: string) {
+    if (!this.client) throw new Error('OpenAI client not initialized (missing OPENAI_API_KEY)');
+    const response = await this.client.chat.completions.create({
+      model: model || process.env.LLM_MODEL || 'gpt-4o',
+      messages
+    });
+    return response;
+  }
 
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 2000,
-      });
-
-      return response.choices[0]?.message?.content || 'No response';
-    } catch (error: any) {
-      console.error('OpenAI API error:', error);
-      throw new Error(`OpenAI error: ${error.message}`);
-    }
+  async streamChat(messages: Array<{role: string; content: string}>, model?: string) {
+    if (!this.client) throw new Error('OpenAI client not initialized');
+    return this.client.chat.completions.create({
+      model: model || process.env.LLM_MODEL || 'gpt-4o',
+      messages,
+      stream: true
+    });
   }
 }
+
+export const openai = new OpenAIService();

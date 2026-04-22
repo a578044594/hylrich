@@ -1,49 +1,49 @@
-import { Tool } from './types/Tool';
-import { OpenAIService } from '../services/OpenAIService';
-
-export interface HylrichInput {
-  message: string;
-  context?: any;
-}
-
-export interface HylrichOutput {
-  reply: string;
-  tools?: any[];
-  timestamp: string;
-  error?: string;
-}
+import { AgentSystem } from '../services/AgentSystem';
+import { EventBus } from './EventBus';
+import { ContextManager } from '../services/ContextManager';
 
 export class HylrichCore {
-  private tools: Map<string, Tool> = new Map();
-  private openai: OpenAIService | null = null;
-
+  private agentSystem: AgentSystem;
+  
   constructor() {
-    if (process.env.OPENAI_API_KEY) {
-      this.openai = new OpenAIService();
-    }
+    this.agentSystem = new AgentSystem();
   }
 
-  registerTool(tool: Tool): void {
-    this.tools.set(tool.name, tool);
-  }
-
-  async processMessage(input: string, context?: any): Promise<HylrichOutput> {
-    if (this.openai) {
-      try {
-        const reply = await this.openai.chat(input, '你是一个有用的AI助手。');
-        return { reply, timestamp: new Date().toISOString() };
-      } catch (error: any) {
-        return {
-          reply: `抱歉，AI服务出错: ${error.message}`,
-          error: error.message,
-          timestamp: new Date().toISOString()
-        };
-      }
-    }
-
+  getStatus() {
+    const agents = this.agentSystem.listAgents();
     return {
-      reply: `收到消息: "${input}" (未配置 OPENAI_API_KEY)`,
-      timestamp: new Date().toISOString()
+      status: 'active',
+      agentsCount: agents.length,
+      agents: agents,
+      uptime: process.uptime()
     };
   }
+
+  async createAgent(config: any) {
+    return this.agentSystem.createAgent(config);
+  }
+
+  async executeTool(toolName: string, input: any) {
+    return this.agentSystem.toolRegistry.execute(toolName, input);
+  }
+
+  async chat(agentId: string, message: string, sessionId?: string) {
+    return this.agentSystem.processMessage(agentId, message, sessionId);
+  }
+
+  getEventBus(): EventBus {
+    return this.agentSystem.getEventBus();
+  }
+
+  getContextManager(): ContextManager {
+    return this.agentSystem.getContextManager();
+  }
 }
+
+  listAgents() {
+    return this.agentSystem.listAgents();
+  }
+
+  getAgent(id: string) {
+    return this.agentSystem.getAgent(id);
+  }

@@ -1,18 +1,17 @@
-import { Tool } from './types/Tool';
-export interface HylrichInput {
-    message: string;
-    context?: any;
-}
-export interface HylrichOutput {
-    reply: string;
-    tools?: any[];
-    timestamp: string;
-    error?: string;
-}
+import { EventBus } from './EventBus';
+import { ContextManager } from '../services/ContextManager';
 export declare class HylrichCore {
-    private tools;
-    private openai;
+    private agentSystem;
     constructor();
-    registerTool(tool: Tool): void;
-    processMessage(input: string, context?: any): Promise<HylrichOutput>;
+    getStatus(): {
+        status: string;
+        agentsCount: number;
+        agents: import("../types/agent").Agent[];
+        uptime: number;
+    };
+    createAgent(config: any): Promise<import("../types/agent").Agent>;
+    executeTool(toolName: string, input: any): Promise<import("../types/tool").ToolResult>;
+    chat(agentId: string, message: string, sessionId?: string): Promise<any>;
+    getEventBus(): EventBus;
+    getContextManager(): ContextManager;
 }

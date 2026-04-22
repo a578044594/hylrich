@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileWriteTool = void 0;
-const EnhancedMCPTool_1 = require("./EnhancedMCPTool");
+const Tool_1 = require("../core/Tool");
 const fs_1 = require("fs");
-class FileWriteTool extends EnhancedMCPTool_1.EnhancedMCPTool {
+class FileWriteTool extends Tool_1.Tool {
     constructor() {
         super(...arguments);
         this.name = 'file_write';
@@ -14,7 +14,7 @@ class FileWriteTool extends EnhancedMCPTool_1.EnhancedMCPTool {
                 path: { type: 'string', description: '文件路径' },
                 content: { type: 'string', description: '文件内容' }
             },
-            required: ['path', 'content'] // 现在是字符串数组
+            required: ['path', 'content']
         };
     }
     async performExecution(input) {

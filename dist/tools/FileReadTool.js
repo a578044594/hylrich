@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileReadTool = void 0;
-const EnhancedMCPTool_1 = require("./EnhancedMCPTool");
+const Tool_1 = require("../core/Tool");
 const fs_1 = require("fs");
-class FileReadTool extends EnhancedMCPTool_1.EnhancedMCPTool {
+class FileReadTool extends Tool_1.Tool {
     constructor() {
         super(...arguments);
         this.name = 'file_read';
@@ -13,7 +13,7 @@ class FileReadTool extends EnhancedMCPTool_1.EnhancedMCPTool {
             properties: {
                 path: { type: 'string', description: '文件路径' }
             },
-            required: ['path'] // 现在是字符串数组
+            required: ['path']
         };
     }
     async performExecution(input) {

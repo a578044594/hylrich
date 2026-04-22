@@ -1,6 +1,19 @@
-export declare class OpenAIService {
+import OpenAI from 'openai';
+declare class OpenAIService {
     private client;
-    private model;
-    constructor(apiKey?: string, model?: string, baseUrl?: string);
-    chat(message: string, systemPrompt?: string): Promise<string>;
+    constructor();
+    chat(messages: Array<{
+        role: string;
+        content: string;
+    }>, model?: string): Promise<OpenAI.Chat.Completions.ChatCompletion & {
+        _request_id?: string | null;
+    } & import("openai/core/streaming").Stream<OpenAI.Chat.Completions.ChatCompletionChunk>>;
+    streamChat(messages: Array<{
+        role: string;
+        content: string;
+    }>, model?: string): Promise<OpenAI.Chat.Completions.ChatCompletion & {
+        _request_id?: string | null;
+    } & import("openai/core/streaming").Stream<OpenAI.Chat.Completions.ChatCompletionChunk>>;
 }
+export declare const openai: OpenAIService;
+export {};

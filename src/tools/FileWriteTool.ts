@@ -1,7 +1,7 @@
-import { EnhancedMCPTool } from './EnhancedMCPTool';
+import { Tool } from '../core/Tool';
 import { promises as fs } from 'fs';
 
-export class FileWriteTool extends EnhancedMCPTool {
+export class FileWriteTool extends Tool {
   public readonly name = 'file_write';
   public readonly description = '写入文件内容';
   public readonly parameters: any = {
@@ -10,8 +10,8 @@ export class FileWriteTool extends EnhancedMCPTool {
       path: { type: 'string', description: '文件路径' },
       content: { type: 'string', description: '文件内容' }
     },
-    required: ['path', 'content'] // 现在是字符串数组
-  } as const;
+    required: ['path', 'content']
+  };
 
   protected async performExecution(input: { path: string; content: string }): Promise<void> {
     try {

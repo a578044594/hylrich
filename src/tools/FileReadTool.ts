@@ -1,7 +1,7 @@
-import { EnhancedMCPTool } from './EnhancedMCPTool';
+import { Tool } from '../core/Tool';
 import { promises as fs } from 'fs';
 
-export class FileReadTool extends EnhancedMCPTool {
+export class FileReadTool extends Tool {
   public readonly name = 'file_read';
   public readonly description = '读取文件内容';
   public readonly parameters: any = {
@@ -9,8 +9,8 @@ export class FileReadTool extends EnhancedMCPTool {
     properties: {
       path: { type: 'string', description: '文件路径' }
     },
-    required: ['path'] // 现在是字符串数组
-  } as const;
+    required: ['path']
+  };
 
   protected async performExecution(input: { path: string }): Promise<string> {
     try {

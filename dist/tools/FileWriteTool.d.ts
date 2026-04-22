@@ -1,5 +1,5 @@
-import { EnhancedMCPTool } from './EnhancedMCPTool';
-export declare class FileWriteTool extends EnhancedMCPTool {
+import { Tool } from '../core/Tool';
+export declare class FileWriteTool extends Tool {
     readonly name = "file_write";
     readonly description = "\u5199\u5165\u6587\u4EF6\u5185\u5BB9";
     readonly parameters: any;

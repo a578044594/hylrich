@@ -1,37 +1,43 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HylrichCore = void 0;
-const OpenAIService_1 = require("../services/OpenAIService");
+const AgentSystem_1 = require("../services/AgentSystem");
 class HylrichCore {
     constructor() {
-        this.tools = new Map();
-        this.openai = null;
-        if (process.env.OPENAI_API_KEY) {
-            this.openai = new OpenAIService_1.OpenAIService();
-        }
+        this.agentSystem = new AgentSystem_1.AgentSystem();
     }
-    registerTool(tool) {
-        this.tools.set(tool.name, tool);
-    }
-    async processMessage(input, context) {
-        if (this.openai) {
-            try {
-                const reply = await this.openai.chat(input, '你是一个有用的AI助手。');
-                return { reply, timestamp: new Date().toISOString() };
-            }
-            catch (error) {
-                return {
-                    reply: `抱歉，AI服务出错: ${error.message}`,
-                    error: error.message,
-                    timestamp: new Date().toISOString()
-                };
-            }
-        }
+    getStatus() {
+        const agents = this.agentSystem.listAgents();
         return {
-            reply: `收到消息: "${input}" (未配置 OPENAI_API_KEY)`,
-            timestamp: new Date().toISOString()
+            status: 'active',
+            agentsCount: agents.length,
+            agents: agents,
+            uptime: process.uptime()
         };
+    }
+    async createAgent(config) {
+        return this.agentSystem.createAgent(config);
+    }
+    async executeTool(toolName, input) {
+        return this.agentSystem.toolRegistry.execute(toolName, input);
+    }
+    async chat(agentId, message, sessionId) {
+        return this.agentSystem.processMessage(agentId, message, sessionId);
+    }
+    getEventBus() {
+        return this.agentSystem.getEventBus();
+    }
+    getContextManager() {
+        return this.agentSystem.getContextManager();
     }
 }
 exports.HylrichCore = HylrichCore;
+listAgents();
+{
+    return this.agentSystem.listAgents();
+}
+getAgent(id, string);
+{
+    return this.agentSystem.getAgent(id);
+}
 //# sourceMappingURL=HylrichCore.js.map

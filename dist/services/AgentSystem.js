@@ -1,41 +1,54 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AgentSystem = void 0;
-const GrpcProtocol_1 = require("../protocols/grpc/GrpcProtocol");
+const ToolRegistry_1 = require("./ToolRegistry");
+const EventBus_1 = require("../core/EventBus");
+const ContextManager_1 = require("./ContextManager");
+const OpenAIAgent_1 = require("./OpenAIAgent");
+const FileTools_1 = require("../tools/FileTools");
 class AgentSystem {
     constructor() {
-        this.grpcProtocol = new GrpcProtocol_1.GrpcProtocol();
+        this.agents = new Map();
+        this.eventBus = new EventBus_1.EventBus();
+        this.context = new ContextManager_1.ContextManager();
+        this.toolRegistry = new ToolRegistry_1.ToolRegistry();
+        this.registerDefaultTools();
     }
-    async start() {
-        console.log('🚀 启动Agent系统...');
-        try {
-            await this.grpcProtocol.start();
+    registerDefaultTools() {
+        this.toolRegistry.register(FileTools_1.FileWriteTool.definition, FileTools_1.FileWriteTool.execute);
+        this.toolRegistry.register(FileTools_1.FileReadTool.definition, FileTools_1.FileReadTool.execute);
+    }
+    async createAgent(config) {
+        let agent;
+        if (config.capabilities?.includes('openai') || !config.capabilities) {
+            agent = new OpenAIAgent_1.OpenAIAgent(config, this.toolRegistry, this.eventBus, this.context);
         }
-        catch (err) {
-            console.warn('⚠️ gRPC启动失败，将以有限功能运行');
+        else {
+            throw new Error('Unknown agent type');
         }
-        console.log('✅ Agent系统启动完成');
+        this.agents.set(agent.id, agent);
+        this.eventBus.emit({ type: 'agent.created', payload: { agentId: agent.id, name: agent.name } });
+        return agent.getDefinition();
     }
-    async stop() {
-        console.log('🛑 停止Agent系统...');
-        await this.grpcProtocol.stop();
-        console.log('✅ Agent系统已停止');
+    getAgent(id) {
+        return this.agents.get(id)?.getDefinition();
     }
-    async sendMessage(message) {
-        console.log('📨 发送消息:', message);
-        // 不依赖WebSocket总线，直接处理
+    listAgents() {
+        return Array.from(this.agents.values()).map(a => a.getDefinition());
     }
-    async executeTool(toolName, input) {
-        console.log(`🛠️ 执行工具: ${toolName}`);
-        return await this.grpcProtocol.executeTool(toolName, input);
+    async processMessage(agentId, message, sessionId) {
+        const agent = this.agents.get(agentId);
+        if (!agent)
+            throw new Error(`Agent ${agentId} not found`);
+        const sid = sessionId || `session-${agentId}-${Date.now()}`;
+        const result = await agent.processMessage(message, sid);
+        return { message: result, sessionId: sid };
     }
-    async healthCheck() {
-        return await this.grpcProtocol.healthCheck();
+    getEventBus() {
+        return this.eventBus;
     }
-    getStatus() {
-        return {
-            grpcRunning: this.grpcProtocol.isRunning
-        };
+    getContextManager() {
+        return this.context;
     }
 }
 exports.AgentSystem = AgentSystem;

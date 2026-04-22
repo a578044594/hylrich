@@ -1,7 +1,7 @@
-import { EnhancedMCPTool } from "../tools/EnhancedMCPTool";
+import { Tool } from '../core/Tool';
 export interface AgentConfig {
     name: string;
-    tool: EnhancedMCPTool;
+    tool: Tool;
     maxConcurrent?: number;
     timeout?: number;
     memoryLimit?: number;

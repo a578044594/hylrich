@@ -1,161 +1,122 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import { WebSocket, WebSocketServer } from 'ws';
-import { AgentSystem } from '../services/AgentSystem';
+import * as http from 'http';
 import { HylrichCore } from '../core/HylrichCore';
 
-const app = express();
-const HTTP_PORT = process.env.PORT ? parseInt(process.env.PORT) : 8080;
-const WS_PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 8082; // 改为8082
+function main() {
+  const core = new HylrichCore();
+  const port = 8090;
+  const host = '0.0.0.0';
 
-app.use(helmet());
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-
-let agentSystem: AgentSystem | null = null;
-let httpServer: any = null;
-let wss: WebSocketServer | null = null;
-
-async function startServer() {
-  console.log("🔍 环境变量检查:");
-  console.log("  OPENAI_API_KEY:", process.env.OPENAI_API_KEY ? "SET" : "NOT SET");
-  console.log("  OPENAI_BASE_URL:", process.env.OPENAI_BASE_URL || "default");
-  console.log("  LLM_MODEL:", process.env.LLM_MODEL || "default");
-  try {
-    console.log('🚀 启动Agent系统...');
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url || '/', `http://${req.headers.host}`);
     
-    agentSystem = new AgentSystem();
-    
-    // 启动Agent系统（内部会启动gRPC和WebSocket总线）
-    try {
-      await agentSystem.start();
-    } catch (err) {
-      console.warn('⚠️ AgentSystem部分组件启动失败，系统将继续以有限功能运行:', err);
+    if (req.method === 'GET' && url.pathname === '/health') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+      return;
     }
-    
-    console.log('✅ Agent系统启动完成');
 
-    // HTTP 服务
-    app.get('/health', (req: Request, res: Response) => {
-      res.json({ 
-        status: 'ok', 
-        timestamp: new Date().toISOString(),
-        agentSystem: agentSystem ? 'running' : 'stopped'
-      });
-    });
-
-    app.get('/status', (req: Request, res: Response) => {
-      const status = agentSystem?.getStatus() || { error: 'AgentSystem未启动' };
-      res.json({
-        ...status,
-        uptime: process.uptime(),
-        httpPort: HTTP_PORT,
-        wsPort: WS_PORT
-      });
-    });
-
-    app.post('/chat', async (req: Request, res: Response) => {
-      const { prompt, message } = req.body;
-      const text = prompt || message;
-      if (!text) {
-        res.status(400).json({ error: 'message required' });
-        return;
-      }
-
+    if (req.method === 'GET' && url.pathname === '/status') {
       try {
-        const core = new HylrichCore();
-        const result = await core.processMessage(text);
-        res.json(result);
-      } catch (error: any) {
-        console.error('Chat error:', error);
-        res.status(500).json({ error: error.message });
+        const status = core.getStatus();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(status));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', error: err.message }));
       }
-    });
+      return;
+    }
 
-    app.post('/tool', async (req: Request, res: Response) => {
-      const { toolName, input } = req.body;
-      if (!toolName) {
-        res.status(400).json({ error: 'toolName required' });
-        return;
-      }
-
+    if (req.method === 'GET' && url.pathname === '/agents') {
       try {
-        if (!agentSystem) {
-          res.status(503).json({ error: 'AgentSystem未启动' });
-          return;
-        }
-        const result = await agentSystem.executeTool(toolName, input);
-        res.json({ result });
-      } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        const agents = core.listAgents();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(agents));
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', error: err.message }));
       }
-    });
+      return;
+    }
 
-    httpServer = app.listen(HTTP_PORT, () => {
-      console.log(`🚀 Hylrich Server listening on port ${HTTP_PORT}`);
-    });
-
-    // 独立的WebSocket服务（与AgentSystem内部的WebSocket总线分开）
-    const wssServer = new WebSocketServer({ 
-      server: httpServer, 
-      path: '/ws' 
-    });
-    
-    wss = wssServer;
-    wssServer.on('connection', (ws: WebSocket) => {
-      console.log('🔌 WebSocket client connected');
-      ws.on('message', async (data: string) => {
+    if (req.method === 'POST' && url.pathname === '/agents') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
         try {
-          const msg = JSON.parse(data.toString());
-          const text = msg.prompt || msg.message;
-          if (text) {
-            const core = new HylrichCore();
-            const result = await core.processMessage(text);
-            ws.send(JSON.stringify(result));
-          } else {
-            ws.send(JSON.stringify({ error: 'message required' }));
+          const config = JSON.parse(body);
+          if (!config.name) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Agent name required' }));
+            return;
           }
-        } catch (err) {
-          ws.send(JSON.stringify({ error: 'invalid request' }));
+          const agent = await core.createAgent(config);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(agent));
+        } catch (err: any) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: err.message }));
         }
       });
-      ws.on('close', () => {
-        console.log('🔌 WebSocket client disconnected');
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/tool') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const { tool, input } = JSON.parse(body);
+          if (!tool) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'Missing tool name' }));
+            return;
+          }
+          const result = await core.executeTool(tool, input);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } catch (err: any) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: err.message }));
+        }
       });
-    });
+      return;
+    }
 
-    console.log('✅ HTTP + WebSocket service ready');
-    
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
+    if (req.method === 'POST' && url.pathname === '/chat') {
+      let body = '';
+      req.on('data', chunk => body += chunk);
+      req.on('end', async () => {
+        try {
+          const { agentId, message, sessionId } = JSON.parse(body);
+          if (!agentId || !message) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ error: 'agentId and message required' }));
+            return;
+          }
+          const result = await core.chat(agentId, message, sessionId);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } catch (err: any) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+      return;
+    }
+
+    res.writeHead(404);
+    res.end(JSON.stringify({ error: 'Not found' }));
+  });
+
+  server.listen(port, host, () => {
+    console.log(`🚀 Hylrich Server listening on http://${host}:${port}`);
+    console.log(`Health: http://localhost:${port}/health`);
+    console.log(`Status: http://localhost:${port}/status`);
+    console.log(`Agents: GET/POST /agents`);
+    console.log(`Chat: POST /chat`);
+    console.log(`Tool: POST /tool`);
+  });
 }
 
-async function shutdown() {
-  console.log('🛑 Shutting down...');
-  
-  if (wss) {
-    wss.close();
-    console.log('🛑 WebSocket server stopped');
-  }
-  
-  if (httpServer) {
-    await new Promise(resolve => httpServer.close(resolve));
-    console.log('🛑 HTTP server stopped');
-  }
-  
-  if (agentSystem) {
-    await agentSystem.stop();
-    console.log('🛑 AgentSystem stopped');
-  }
-  
-  console.log('✅ Shutdown complete');
-  process.exit(0);
-}
-
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
-
-startServer();
+main();

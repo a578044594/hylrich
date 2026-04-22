@@ -1,24 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HylrichCore = exports.AgentSystem = exports.EnhancedMCPTool = exports.GrpcClient = exports.GrpcProtocol = exports.WebSocketBus = void 0;
+exports.HylrichCore = void 0;
 exports.start = start;
-const WebSocketBus_1 = require("./protocols/websocket/WebSocketBus");
-Object.defineProperty(exports, "WebSocketBus", { enumerable: true, get: function () { return WebSocketBus_1.WebSocketBus; } });
-const GrpcProtocol_1 = require("./protocols/grpc/GrpcProtocol");
-Object.defineProperty(exports, "GrpcProtocol", { enumerable: true, get: function () { return GrpcProtocol_1.GrpcProtocol; } });
-const GrpcClient_1 = require("./protocols/grpc/GrpcClient");
-Object.defineProperty(exports, "GrpcClient", { enumerable: true, get: function () { return GrpcClient_1.GrpcClient; } });
-const EnhancedMCPTool_1 = require("./protocols/EnhancedMCPTool");
-Object.defineProperty(exports, "EnhancedMCPTool", { enumerable: true, get: function () { return EnhancedMCPTool_1.EnhancedMCPTool; } });
-const AgentSystem_1 = require("./services/AgentSystem");
-Object.defineProperty(exports, "AgentSystem", { enumerable: true, get: function () { return AgentSystem_1.AgentSystem; } });
 const HylrichCore_1 = require("./core/HylrichCore");
 Object.defineProperty(exports, "HylrichCore", { enumerable: true, get: function () { return HylrichCore_1.HylrichCore; } });
 // 启动系统
+// AgentSystem and related protocols have been removed from this build
+// Use HylrichCore directly for message processing
 function start() {
-    console.log('Hylrich系统启动中...');
-    const agentSystem = new AgentSystem_1.AgentSystem();
-    agentSystem.start();
-    console.log('Hylrich系统启动完成');
+    console.log('HylrichCore is available for direct use');
 }
 //# sourceMappingURL=index.js.map
