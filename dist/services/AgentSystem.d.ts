@@ -1,6 +1,5 @@
 export declare class AgentSystem {
     private grpcProtocol;
-    private websocketBus;
     constructor();
     start(): Promise<void>;
     stop(): Promise<void>;
@@ -9,6 +8,5 @@ export declare class AgentSystem {
     healthCheck(): Promise<any>;
     getStatus(): {
         grpcRunning: boolean;
-        websocketRunning: boolean;
     };
 }

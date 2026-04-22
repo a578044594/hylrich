@@ -1,7 +1,7 @@
 export declare class GrpcProtocol {
     private client;
     private _isRunning;
-    constructor(target?: string);
+    constructor();
     get isRunning(): boolean;
     start(): Promise<void>;
     stop(): Promise<void>;

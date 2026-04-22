@@ -1,23 +1,14 @@
-import { StateUpdate } from './DistributedStateManager';
-export interface StateSyncServiceConfig {
-    nodeId: string;
-    grpcHost: string;
-    grpcPort: number;
-    syncInterval?: number;
+import { EventEmitter } from 'events';
+export interface StateSnapshot {
+    timestamp: number;
+    data: any;
 }
-export declare class StateSyncService {
-    private stateManager;
-    private grpcClient;
-    private config;
-    private isRunning;
-    constructor(config: StateSyncServiceConfig);
+export declare class StateSyncService extends EventEmitter {
+    private states;
+    constructor();
     start(): Promise<void>;
     stop(): Promise<void>;
-    private startSyncLoop;
-    setState(key: string, value: any): Promise<StateUpdate>;
-    getState(key: string): any;
-    processRemoteUpdate(update: StateUpdate): Promise<boolean>;
-    getServiceStatus(): any;
-    registerRemoteNode(nodeInfo: any): void;
-    discoverNodes(): Promise<void>;
+    saveState(key: string, value: any): Promise<void>;
+    loadState(key: string): Promise<any>;
+    getAllStates(): Promise<Map<string, any>>;
 }

@@ -1,65 +1,72 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EnhancedMCPTool = void 0;
-const Tool_1 = require("../core/Tool");
-class EnhancedMCPTool extends Tool_1.Tool {
+const GrpcClient_1 = require("../protocols/grpc/GrpcClient");
+class EnhancedMCPTool {
     constructor() {
-        super();
-        this.executionHistory = [];
+        this.name = 'enhanced_mcp';
+        this.description = '通过增强MCP协议执行远程工具调用';
+        this.parameters = {
+            type: 'object',
+            properties: {
+                serverUrl: { type: 'string', description: '目标服务器地址' },
+                toolName: { type: 'string', description: '要调用的工具名' },
+                input: { type: 'object', description: '工具输入参数' }
+            },
+            required: ['toolName']
+        };
         this.executionCount = 0;
+        this.errorCount = 0;
+        this.executionHistory = [];
+        this.client = new GrpcClient_1.GrpcClient('localhost:50051');
     }
-    recordExecution(metrics) {
-        this.executionHistory.push(metrics);
+    async performExecution(input) {
+        const startTime = Date.now();
         this.executionCount++;
-        // 保持历史记录大小
-        if (this.executionHistory.length > 50) {
-            this.executionHistory.shift();
+        try {
+            const { toolName, input: toolInput, serverUrl } = input;
+            if (serverUrl) {
+                this.client = new GrpcClient_1.GrpcClient(serverUrl);
+            }
+            // 模拟gRPC调用
+            console.log(`🔧 执行工具: ${toolName}`);
+            const result = await this.client.executeTool(toolName, toolInput || {});
+            const duration = Date.now() - startTime;
+            this.executionHistory.push({
+                toolName,
+                success: true,
+                duration,
+                timestamp: new Date().toISOString()
+            });
+            return { result };
+        }
+        catch (error) {
+            this.errorCount++;
+            const duration = Date.now() - startTime;
+            this.executionHistory.push({
+                toolName: input.toolName,
+                success: false,
+                duration,
+                timestamp: new Date().toISOString(),
+                error: error.message
+            });
+            throw error;
         }
     }
     getPerformanceStats() {
-        const successfulExecutions = this.executionHistory.filter(m => m.success).length;
-        const failedExecutions = this.executionHistory.filter(m => m.success === false).length;
-        const totalTime = this.executionHistory.reduce((sum, m) => sum + (m.executionTime || 0), 0);
+        const successRate = this.executionCount > 0
+            ? ((this.executionCount - this.errorCount) / this.executionCount) * 100
+            : 0;
+        const errorRate = this.executionCount > 0
+            ? (this.errorCount / this.executionCount) * 100
+            : 0;
         return {
             totalExecutions: this.executionCount,
-            errorCount: failedExecutions,
-            errorRate: this.executionCount > 0 ? (failedExecutions / this.executionCount) * 100 : 0,
-            successRate: this.executionCount > 0 ? (successfulExecutions / this.executionCount) * 100 : 0,
-            averageExecutionTime: this.executionCount > 0 ? totalTime / this.executionCount : 0
+            errorCount: this.errorCount,
+            errorRate,
+            successRate,
+            executionHistory: this.executionHistory
         };
-    }
-    async execute(input) {
-        const startTime = Date.now();
-        let success;
-        let error;
-        try {
-            console.log(`🔧 执行增强MCP工具: ${this.name}`);
-            const result = await this.performExecution(input);
-            success = true;
-            const endTime = Date.now();
-            this.recordExecution({
-                startTime,
-                endTime,
-                success,
-                executionTime: endTime - startTime
-            });
-            console.log(`✅ 工具执行完成: ${this.name}`);
-            return result;
-        }
-        catch (err) {
-            success = false;
-            error = err instanceof Error ? err.message : String(err);
-            const endTime = Date.now();
-            this.recordExecution({
-                startTime,
-                endTime,
-                success,
-                error,
-                executionTime: endTime - startTime
-            });
-            console.error(`❌ 工具执行失败: ${this.name}`, error);
-            throw err;
-        }
     }
 }
 exports.EnhancedMCPTool = EnhancedMCPTool;

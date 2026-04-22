@@ -4,8 +4,8 @@ export class GrpcProtocol {
   private client: GrpcClient;
   private _isRunning: boolean;
 
-  constructor(target?: string) {
-    this.client = new GrpcClient(target);
+  constructor() {
+    this.client = new GrpcClient(); // 使用默认 localhost:50051
     this._isRunning = false;
   }
 

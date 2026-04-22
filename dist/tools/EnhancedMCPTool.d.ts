@@ -1,23 +1,39 @@
-import { Tool } from '../core/Tool';
-export interface MCPExecutionMetrics {
-    startTime: number;
-    endTime?: number;
-    success?: boolean;
-    error?: string;
-    executionTime?: number;
+import { Tool, ToolInput, ToolExecutionMetrics, ToolOutput } from './types/Tool';
+export interface EnhancedMCPInput extends ToolInput {
+    serverUrl?: string;
 }
-export declare abstract class EnhancedMCPTool extends Tool {
-    protected executionHistory: MCPExecutionMetrics[];
-    protected executionCount: number;
+export declare class EnhancedMCPTool implements Tool {
+    name: string;
+    description: string;
+    parameters: {
+        type: string;
+        properties: {
+            serverUrl: {
+                type: string;
+                description: string;
+            };
+            toolName: {
+                type: string;
+                description: string;
+            };
+            input: {
+                type: string;
+                description: string;
+            };
+        };
+        required: string[];
+    };
+    private client;
+    private executionCount;
+    private errorCount;
+    private executionHistory;
     constructor();
-    protected recordExecution(metrics: MCPExecutionMetrics): void;
+    performExecution(input: any): Promise<ToolOutput>;
     getPerformanceStats(): {
         totalExecutions: number;
         errorCount: number;
         errorRate: number;
         successRate: number;
-        averageExecutionTime: number;
+        executionHistory: ToolExecutionMetrics[];
     };
-    protected abstract performExecution(input: any): Promise<any>;
-    execute(input: any): Promise<any>;
 }

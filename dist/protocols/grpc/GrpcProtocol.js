@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GrpcProtocol = void 0;
 const GrpcClient_1 = require("./GrpcClient");
 class GrpcProtocol {
-    constructor(target) {
-        this.client = new GrpcClient_1.GrpcClient(target);
+    constructor() {
+        this.client = new GrpcClient_1.GrpcClient(); // 使用默认 localhost:50051
         this._isRunning = false;
     }
     get isRunning() {

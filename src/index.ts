@@ -1,10 +1,9 @@
-// Hylrich项目主入口
-
-import { WebSocketBus } from './protocols/WebSocketBus';
+import { WebSocketBus } from './protocols/websocket/WebSocketBus';
 import { GrpcProtocol } from './protocols/grpc/GrpcProtocol';
 import { GrpcClient } from './protocols/grpc/GrpcClient';
 import { EnhancedMCPTool } from './protocols/EnhancedMCPTool';
 import { AgentSystem } from './services/AgentSystem';
+import { HylrichCore } from './core/HylrichCore';
 
 // 导出主要组件
 export {
@@ -12,7 +11,8 @@ export {
   GrpcProtocol,
   GrpcClient,
   EnhancedMCPTool,
-  AgentSystem
+  AgentSystem,
+  HylrichCore
 };
 
 // 启动系统
