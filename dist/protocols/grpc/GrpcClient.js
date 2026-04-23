@@ -159,8 +159,9 @@ class GrpcClient {
                 }
                 else {
                     const snapshot = {};
-                    for (const [key, buffer] of Object.entries(response.state || {})) {
-                        snapshot[key] = JSON.parse(buffer.toString());
+                    for (const [key, buf] of Object.entries(response.state || {})) {
+                        const buffer = buf;
+                        snapshot[key] = JSON.parse(buffer.toString('utf8'));
                     }
                     resolve(snapshot);
                 }

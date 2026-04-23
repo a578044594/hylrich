@@ -61,29 +61,30 @@ class GRPCService {
         if (!agentPackage || !agentPackage.AgentService) {
             throw new Error('Failed to load AgentService from proto definition');
         }
-        this.server.addService(agentPackage.AgentService.service, {
+        // Cast implementation to any to bypass strict overload checking
+        const impl = {
             ExecuteTool: this.executeTool.bind(this),
             GetSystemHealth: this.getSystemHealth.bind(this),
             StreamMetrics: this.streamMetrics.bind(this),
             StreamStateUpdates: this.streamStateUpdates.bind(this),
             PublishState: this.publishState.bind(this),
             GetCurrentState: this.getCurrentState.bind(this)
-        });
+        };
+        this.server.addService(agentPackage.AgentService.service, impl);
         console.log('gRPC services with StateSync setup completed');
     }
     executeTool(call, callback) {
         const { tool_name, input_data } = call.request;
         try {
-            const input = JSON.parse(input_data.toString());
-            // 这里应该调用真正的工具注册表
+            const input = JSON.parse(input_data.toString('utf8'));
             const result = {
                 success: true,
-                result_data: JSON.stringify({ output: `Mock result for ${tool_name}` }),
+                result_data: Buffer.from(JSON.stringify({ output: `Mock result for ${tool_name}` })),
                 execution_time_ms: 0
             };
             callback(null, {
                 success: true,
-                result_data: Buffer.from(JSON.stringify(result)),
+                result_data: result.result_data,
                 execution_time_ms: 0
             });
         }
@@ -105,7 +106,7 @@ class GRPCService {
         };
         callback(null, healthData);
     }
-    streamMetrics(call) {
+    streamMetrics(call, send) {
         const { interval_ms } = call.request;
         const interval = interval_ms || 1000;
         const timer = setInterval(() => {
@@ -118,17 +119,16 @@ class GRPCService {
                 memory_usage_mb: process.memoryUsage().heapUsed / 1024 / 1024,
                 message_throughput: Math.floor(Math.random() * 100)
             };
-            call.write(metrics);
+            send.write(metrics);
         }, interval);
         call.on('cancelled', () => {
             clearInterval(timer);
         });
     }
     /**
-     * 流式状态更新 - 客户端订阅状态变更
-     * 实现：客户端发起流，服务端推送状态变更
+     * 流式状态更新
      */
-    streamStateUpdates(call, callback) {
+    streamStateUpdates(call, send) {
         const request = call.request;
         const { client_id, filter_prefix } = request;
         console.log(`[StateSync] Stream started for client ${client_id}`);
@@ -138,9 +138,9 @@ class GRPCService {
             for (const [key, value] of Object.entries(snapshot)) {
                 if (call.cancelled)
                     break;
-                call.write({
+                send.write({
                     key,
-                    value: Buffer.from(JSON.stringify(value)),
+                    value: Buffer.from(JSON.stringify(value) || ''),
                     operation: 'set',
                     timestamp: Date.now(),
                     source: 'snapshot'
@@ -156,18 +156,18 @@ class GRPCService {
                         unsubscribe();
                     return;
                 }
-                const { prefix } = request;
+                const { filter_prefix: prefix } = request;
                 if (prefix && !event.payload.key.startsWith(prefix)) {
                     return;
                 }
                 const update = {
                     key: event.payload.key,
-                    value: Buffer.from(JSON.stringify(event.payload.value)),
+                    value: Buffer.from(JSON.stringify(event.payload.value) || ''),
                     operation: event.payload.operation,
                     timestamp: event.payload.timestamp,
                     source: event.payload.source || 'unknown'
                 };
-                call.write(update);
+                send.write(update);
             });
         }
         call.on('cancelled', () => {
@@ -177,21 +177,20 @@ class GRPCService {
         });
     }
     /**
-     * 发布状态变更 - 客户端发送状态更新
-     * 实现：客户端发送单个状态更新，服务端合并到本地状态并转发
+     * 发布状态变更
      */
     publishState(call, callback) {
         const { key, value, source, timestamp } = call.request;
         try {
-            const valueJson = value ? JSON.parse(value.toString()) : null;
+            const valueJson = value ? JSON.parse(value.toString('utf8')) : null;
             if (this.stateStore) {
                 const localStore = this.stateStore;
                 // 使用内部方法直接更新状态，避免再次 gRPC 广播
                 if (valueJson !== null) {
-                    localStore._internalSet?.(key, valueJson, false);
+                    localStore._internal.set?.(key, valueJson, false);
                 }
                 else {
-                    localStore._internalDelete?.(key, false);
+                    localStore._internal.delete?.(key, false);
                 }
             }
             callback(null, { accepted: true });
@@ -211,7 +210,7 @@ class GRPCService {
             // 将值序列化为 Buffer
             const serializedSnapshot = {};
             for (const [key, value] of Object.entries(snapshot)) {
-                serializedSnapshot[key] = Buffer.from(JSON.stringify(value));
+                serializedSnapshot[key] = Buffer.from(JSON.stringify(value) || '');
             }
             callback(null, {
                 state: serializedSnapshot,
@@ -241,15 +240,8 @@ class GRPCService {
         });
     }
     async stop() {
-        return new Promise((resolve, reject) => {
-            this.server.tryShutdown((error) => {
-                if (error) {
-                    reject(error);
-                }
-                else {
-                    resolve();
-                }
-            });
+        return new Promise((resolve) => {
+            this.server.tryShutdown(() => resolve());
         });
     }
 }

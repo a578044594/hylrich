@@ -161,8 +161,9 @@ export class GrpcClient {
             reject(error);
           } else {
             const snapshot: Record<string, any> = {};
-            for (const [key, buffer] of Object.entries(response.state || {})) {
-              snapshot[key] = JSON.parse(buffer.toString());
+            for (const [key, buf] of Object.entries(response.state || {})) {
+              const buffer = buf as Buffer;
+              snapshot[key] = JSON.parse(buffer.toString('utf8'));
             }
             resolve(snapshot);
           }

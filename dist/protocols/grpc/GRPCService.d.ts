@@ -14,13 +14,11 @@ export declare class GRPCService {
     private getSystemHealth;
     private streamMetrics;
     /**
-     * 流式状态更新 - 客户端订阅状态变更
-     * 实现：客户端发起流，服务端推送状态变更
+     * 流式状态更新
      */
     private streamStateUpdates;
     /**
-     * 发布状态变更 - 客户端发送状态更新
-     * 实现：客户端发送单个状态更新，服务端合并到本地状态并转发
+     * 发布状态变更
      */
     private publishState;
     /**
