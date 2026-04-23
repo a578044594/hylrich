@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package openclaw.agent;
+
+service AgentService {
+  rpc ExecuteTool (ExecuteToolRequest) returns (ExecuteToolResponse);
+  rpc GetSystemHealth (HealthRequest) returns (HealthResponse);
+  rpc StreamMetrics (MetricsStreamRequest) returns (stream MetricsData);
+  rpc StreamStateUpdates (StateStreamRequest) returns (stream StateUpdate);
+  rpc PublishState (StateUpdateRequest) returns (StateUpdateResponse);
+  rpc GetCurrentState (StateSnapshotRequest) returns (StateSnapshotResponse);
+}
+
+message ExecuteToolRequest {
+  string tool_name = 1;
+  bytes input_data = 2;
+}
+
+message ExecuteToolResponse {
+  bool success = 1;
+  bytes result_data = 2;
+  string error_message = 3;
+  int32 execution_time_ms = 4;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  int64 timestamp = 1;
+  int32 tool_count = 2;
+  int32 active_agents = 3;
+  string status = 4;
+}
+
+message MetricsStreamRequest {
+  int32 interval_ms = 1;
+}
+
+message MetricsData {
+  double cpu_usage = 1;
+  double memory_usage_mb = 2;
+  int32 message_throughput = 3;
+}
+
+message StateStreamRequest {
+  string client_id = 1;
+  string filter_prefix = 2;
+}
+
+message StateUpdate {
+  string key = 1;
+  bytes value = 2;
+  string operation = 3;
+  int64 timestamp = 4;
+  string source = 5;
+}
+
+message StateUpdateRequest {
+  string key = 1;
+  bytes value = 2;
+  string source = 3;
+  int64 timestamp = 4;
+}
+
+message StateUpdateResponse {
+  bool accepted = 1;
+  string error = 2;
+}
+
+message StateSnapshotRequest {
+  string filter_prefix = 1;
+}
+
+message StateSnapshotResponse {
+  map<string, bytes> state = 1;
+  int64 timestamp = 2;
+}
