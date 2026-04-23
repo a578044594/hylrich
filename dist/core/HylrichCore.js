@@ -19,10 +19,10 @@ class HylrichCore {
         return this.agentSystem.createAgent(config);
     }
     async executeTool(toolName, input) {
-        return this.agentSystem.toolRegistry.execute(toolName, input);
+        return this.agentSystem.executeTool(toolName, input);
     }
     async chat(agentId, message, sessionId) {
-        return this.agentSystem.processMessage(agentId, message, sessionId);
+        return this.agentSystem.chat(agentId, message, sessionId);
     }
     getEventBus() {
         return this.agentSystem.getEventBus();
@@ -30,14 +30,12 @@ class HylrichCore {
     getContextManager() {
         return this.agentSystem.getContextManager();
     }
+    listAgents() {
+        return this.agentSystem.listAgents();
+    }
+    getAgent(id) {
+        return this.agentSystem.getAgent(id);
+    }
 }
 exports.HylrichCore = HylrichCore;
-listAgents();
-{
-    return this.agentSystem.listAgents();
-}
-getAgent(id, string);
-{
-    return this.agentSystem.getAgent(id);
-}
 //# sourceMappingURL=HylrichCore.js.map

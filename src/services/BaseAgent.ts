@@ -1,4 +1,5 @@
-import { Agent, AgentConfig, Message } from '../types/agent';
+import { Agent, AgentConfig } from '../types/agent';
+import { Message } from '../types/message';
 import { ToolRegistry } from './ToolRegistry';
 import { EventBus } from '../core/EventBus';
 import { ContextManager } from './ContextManager';
@@ -10,6 +11,11 @@ export abstract class BaseAgent implements Agent {
   capabilities: string[];
   state: 'idle' | 'running' | 'error' = 'idle';
   metadata?: Record<string, any>;
+
+  // Provide tools as a getter from the tool registry
+  get tools(): any[] {
+    return this.toolRegistry.list();
+  }
 
   protected toolRegistry: ToolRegistry;
   protected eventBus: EventBus;
@@ -29,7 +35,7 @@ export abstract class BaseAgent implements Agent {
     this.model = config.model;
   }
 
-  abstract async processMessage(message: string, sessionId: string): Promise<Message>;
+  abstract processMessage(message: string, sessionId: string): Promise<Message>;
 
   async executeTool(toolName: string, input: any): Promise<any> {
     return this.toolRegistry.execute(toolName, input, { agentId: this.id });
@@ -41,18 +47,13 @@ export abstract class BaseAgent implements Agent {
       name: this.name,
       description: this.description,
       capabilities: this.capabilities,
-      tools: this.toolRegistry.list(),
+      tools: this.tools,
       state: this.state,
       metadata: this.metadata
     };
   }
 
-  protected emit(event: { type: string; payload?: any }) {
-    this.eventBus.emit({
-      type: event.type,
-      agentId: this.id,
-      timestamp: Date.now(),
-      payload: event.payload || {}
-    });
+  protected emit(event: any) {
+    this.eventBus.emit(event);
   }
 }

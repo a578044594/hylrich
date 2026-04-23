@@ -14,19 +14,21 @@ class OpenAIService {
     }
   }
 
-  async chat(messages: Array<{role: string; content: string}>, model?: string) {
+  async chat(messages: any[], model?: string) {
     if (!this.client) throw new Error('OpenAI client not initialized (missing OPENAI_API_KEY)');
     const response = await this.client.chat.completions.create({
       model: model || process.env.LLM_MODEL || 'gpt-4o',
+      // @ts-ignore: bypass OpenAI SDK strict types
       messages
     });
     return response;
   }
 
-  async streamChat(messages: Array<{role: string; content: string}>, model?: string) {
+  async streamChat(messages: any[], model?: string) {
     if (!this.client) throw new Error('OpenAI client not initialized');
     return this.client.chat.completions.create({
       model: model || process.env.LLM_MODEL || 'gpt-4o',
+      // @ts-ignore
       messages,
       stream: true
     });

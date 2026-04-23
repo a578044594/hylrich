@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpenAIAgent = void 0;
 const BaseAgent_1 = require("./BaseAgent");
-const OpenAIService_1 = require("../services/OpenAIService");
+const OpenAIService_1 = require("./OpenAIService");
 class OpenAIAgent extends BaseAgent_1.BaseAgent {
     async processMessage(message, sessionId) {
         this.state = 'running';
@@ -17,11 +17,8 @@ class OpenAIAgent extends BaseAgent_1.BaseAgent {
         ];
         try {
             // Simple chat completion without tool calling for now
-            const response = await OpenAIService_1.openai.chat.completions.create({
-                model: this.model || 'gpt-4o',
-                messages
-            });
-            const content = response.choices[0].message.content || '';
+            const response = await OpenAIService_1.openai.chat(messages, this.model);
+            const content = response.choices?.[0]?.message?.content || '';
             // Save to context
             const userMsg = {
                 id: `msg-${Date.now()}-user`,

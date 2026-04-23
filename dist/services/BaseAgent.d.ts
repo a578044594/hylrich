@@ -1,4 +1,5 @@
-import { Agent, AgentConfig, Message } from '../types/agent';
+import { Agent, AgentConfig } from '../types/agent';
+import { Message } from '../types/message';
 import { ToolRegistry } from './ToolRegistry';
 import { EventBus } from '../core/EventBus';
 import { ContextManager } from './ContextManager';
@@ -9,6 +10,7 @@ export declare abstract class BaseAgent implements Agent {
     capabilities: string[];
     state: 'idle' | 'running' | 'error';
     metadata?: Record<string, any>;
+    get tools(): any[];
     protected toolRegistry: ToolRegistry;
     protected eventBus: EventBus;
     protected context: ContextManager;
@@ -18,8 +20,5 @@ export declare abstract class BaseAgent implements Agent {
     abstract processMessage(message: string, sessionId: string): Promise<Message>;
     executeTool(toolName: string, input: any): Promise<any>;
     getDefinition(): Agent;
-    protected emit(event: {
-        type: string;
-        payload?: any;
-    }): void;
+    protected emit(event: any): void;
 }

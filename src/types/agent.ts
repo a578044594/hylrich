@@ -1,3 +1,5 @@
+import { ToolDefinition } from './tool';
+
 export interface Agent {
   id: string;
   name: string;

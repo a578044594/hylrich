@@ -3,22 +3,115 @@ import { BaseAgent } from './BaseAgent';
 import { ToolRegistry } from './ToolRegistry';
 import { EventBus } from '../core/EventBus';
 import { ContextManager } from './ContextManager';
+import { Event } from '../types/events';
 import { OpenAIAgent } from './OpenAIAgent';
 import { FileWriteTool, FileReadTool } from '../tools/FileTools';
+import { DistributedStateStore, StateChangeEvent } from '../state/DistributedStateStore';
+import { GrpcClient } from '../protocols/grpc/GrpcClient';
 
 export class AgentSystem {
   private agents: Map<string, BaseAgent> = new Map();
   public readonly toolRegistry: ToolRegistry;
   private eventBus: EventBus;
   private context: ContextManager;
+  private stateStore: DistributedStateStore;
+  private grpcClient?: GrpcClient;
+  private nodeId: string;
 
   constructor() {
     this.eventBus = new EventBus();
     this.context = new ContextManager();
     this.toolRegistry = new ToolRegistry();
+    this.nodeId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 初始化分布式状态存储
+    this.stateStore = new DistributedStateStore({
+      nodeId: this.nodeId,
+      eventBus: this.eventBus
+    });
+    
     this.registerDefaultTools();
+    
+    // 初始化 gRPC 客户端（连接其他节点）
+    this.initGrpcClient();
+    
+    // 监听状态变更，同步到全局
+    this.stateStore.subscribe((event: StateChangeEvent) => {
+      this.handleStateChange(event);
+    });
   }
 
+  private async initGrpcClient() {
+    try {
+      this.grpcClient = new GrpcClient({
+        host: 'localhost',
+        port: 50051
+      });
+
+      // 订阅远程状态更新
+      this.grpcClient.streamStateUpdates(this.nodeId, '', (update: any) => {
+        const value = update.value ? JSON.parse(update.value.toString()) : null;
+        
+        const event: StateChangeEvent = {
+          type: 'state.changed',
+          timestamp: update.timestamp,
+          payload: {
+            key: update.key,
+            value: value,
+            operation: update.operation,
+            timestamp: update.timestamp,
+            source: update.source
+          }
+        };
+        
+        // 处理远程状态变更
+        const localStore = this.stateStore as any;
+        if (localStore['handleRemoteUpdate']) {
+          localStore['handleRemoteUpdate'](event);
+        }
+      });
+
+      console.log('gRPC state sync client initialized');
+    } catch (error) {
+      console.warn('Failed to initialize gRPC client, state sync disabled:', error);
+    }
+  }
+
+  private handleStateChange(event: StateChangeEvent): void {
+    // 发布到事件总线，供其他组件监听
+    this.eventBus.emit(event);
+  }
+
+  /**
+   * 发布全局状态（同步到其他节点）
+   */
+  async publishState(key: string, value: any): Promise<boolean> {
+    // 先更新本地
+    this.stateStore.set(key, value, false); // 本地不广播，由我们统一控制
+    
+    // 广播到其他节点
+    if (this.grpcClient) {
+      return await this.grpcClient.publishState(key, value, this.nodeId);
+    }
+    
+    return true;
+  }
+
+  /**
+   * 获取全局状态快照
+   */
+  getStateSnapshot(filterPrefix?: string): Record<string, any> {
+    return this.stateStore.snapshot(filterPrefix);
+  }
+
+  /**
+   * 订阅全局状态变更
+   */
+  subscribeState(callback: (event: StateChangeEvent) => () => void): () => void {
+    return this.stateStore.subscribe(callback);
+  }
+
+  // 其他方法保持不变...
   private registerDefaultTools() {
     this.toolRegistry.register(FileWriteTool.definition, FileWriteTool.execute);
     this.toolRegistry.register(FileReadTool.definition, FileReadTool.execute);
@@ -33,7 +126,17 @@ export class AgentSystem {
     }
 
     this.agents.set(agent.id, agent);
-    this.eventBus.emit({ type: 'agent.created', payload: { agentId: agent.id, name: agent.name } });
+    
+    // 发布 agent 状态
+    await this.publishState(`agent:${agent.id}:status`, {
+      id: agent.id,
+      name: agent.name,
+      state: 'idle',
+      capabilities: config.capabilities || [],
+      timestamp: Date.now()
+    });
+    
+    this.emitEvent('agent.created', { agentId: agent.id, name: agent.name });
     return agent.getDefinition();
   }
 
@@ -48,9 +151,40 @@ export class AgentSystem {
   async processMessage(agentId: string, message: string, sessionId?: string): Promise<any> {
     const agent = this.agents.get(agentId);
     if (!agent) throw new Error(`Agent ${agentId} not found`);
+    
+    // 更新 agent 状态为运行中
+    await this.publishState(`agent:${agentId}:status`, {
+      state: 'running',
+      lastMessage: message,
+      timestamp: Date.now()
+    });
+    
     const sid = sessionId || `session-${agentId}-${Date.now()}`;
     const result = await agent.processMessage(message, sid);
+    
+    // 恢复 idle 状态
+    await this.publishState(`agent:${agentId}:status`, {
+      state: 'idle',
+      lastResult: typeof result === 'object' ? result : { output: result },
+      timestamp: Date.now()
+    });
+    
     return { message: result, sessionId: sid };
+  }
+
+  // Global tool execution (not tied to a specific agent)
+  async executeTool(toolName: string, input: any): Promise<any> {
+    return this.toolRegistry.execute(toolName, input);
+  }
+
+  async executeAgentTool(agentId: string, toolName: string, input: any): Promise<any> {
+    const agent = this.agents.get(agentId);
+    if (!agent) throw new Error(`Agent ${agentId} not found`);
+    return agent.executeTool(toolName, input);
+  }
+
+  async chat(agentId: string, message: string, sessionId?: string): Promise<{ message: any; sessionId: string }> {
+    return this.processMessage(agentId, message, sessionId);
   }
 
   getEventBus(): EventBus {
@@ -59,5 +193,18 @@ export class AgentSystem {
 
   getContextManager(): ContextManager {
     return this.context;
+  }
+
+  getStateStore(): DistributedStateStore {
+    return this.stateStore;
+  }
+
+  private emitEvent(type: string, payload: any) {
+    const event: Event = {
+      type,
+      timestamp: Date.now(),
+      payload
+    };
+    this.eventBus.emit(event);
   }
 }

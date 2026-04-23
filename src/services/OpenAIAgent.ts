@@ -1,9 +1,10 @@
 import { BaseAgent } from './BaseAgent';
-import { ToolRegistry } from './ToolRegistry';
+import { ToolRegistry } from '../services/ToolRegistry';
 import { EventBus } from '../core/EventBus';
 import { ContextManager } from './ContextManager';
-import { AgentConfig, Message } from '../types/agent';
-import { openai } from '../services/OpenAIService';
+import { AgentConfig } from '../types/agent';
+import { Message } from '../types/message';
+import { openai } from './OpenAIService';
 
 export class OpenAIAgent extends BaseAgent {
   async processMessage(message: string, sessionId: string): Promise<Message> {
@@ -22,12 +23,9 @@ export class OpenAIAgent extends BaseAgent {
 
     try {
       // Simple chat completion without tool calling for now
-      const response = await openai.chat.completions.create({
-        model: this.model || 'gpt-4o',
-        messages
-      });
+      const response = await openai.chat(messages, this.model);
 
-      const content = response.choices[0].message.content || '';
+      const content = response.choices?.[0]?.message?.content || '';
       
       // Save to context
       const userMsg: Message = {

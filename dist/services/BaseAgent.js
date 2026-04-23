@@ -2,6 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseAgent = void 0;
 class BaseAgent {
+    // Provide tools as a getter from the tool registry
+    get tools() {
+        return this.toolRegistry.list();
+    }
     constructor(config, toolRegistry, eventBus, context) {
         this.state = 'idle';
         this.id = config.id || `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -23,18 +27,13 @@ class BaseAgent {
             name: this.name,
             description: this.description,
             capabilities: this.capabilities,
-            tools: this.toolRegistry.list(),
+            tools: this.tools,
             state: this.state,
             metadata: this.metadata
         };
     }
     emit(event) {
-        this.eventBus.emit({
-            type: event.type,
-            agentId: this.id,
-            timestamp: Date.now(),
-            payload: event.payload || {}
-        });
+        this.eventBus.emit(event);
     }
 }
 exports.BaseAgent = BaseAgent;

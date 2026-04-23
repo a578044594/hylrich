@@ -24,11 +24,11 @@ export class HylrichCore {
   }
 
   async executeTool(toolName: string, input: any) {
-    return this.agentSystem.toolRegistry.execute(toolName, input);
+    return this.agentSystem.executeTool(toolName, input);
   }
 
   async chat(agentId: string, message: string, sessionId?: string) {
-    return this.agentSystem.processMessage(agentId, message, sessionId);
+    return this.agentSystem.chat(agentId, message, sessionId);
   }
 
   getEventBus(): EventBus {
@@ -38,7 +38,6 @@ export class HylrichCore {
   getContextManager(): ContextManager {
     return this.agentSystem.getContextManager();
   }
-}
 
   listAgents() {
     return this.agentSystem.listAgents();
@@ -47,3 +46,4 @@ export class HylrichCore {
   getAgent(id: string) {
     return this.agentSystem.getAgent(id);
   }
+}
