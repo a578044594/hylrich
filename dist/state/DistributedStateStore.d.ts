@@ -23,6 +23,7 @@ export declare class DistributedStateStore {
     private nodeId;
     private eventBus?;
     private subscribers;
+    private _internal;
     constructor(config: DistributedStateStoreConfig);
     /**
      * 设置状态值（本地）

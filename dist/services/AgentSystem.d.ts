@@ -10,9 +10,12 @@ export declare class AgentSystem {
     private context;
     private stateStore;
     private grpcClient?;
+    private grpcServer?;
     private nodeId;
+    private grpcPort;
     constructor();
     private initGrpcClient;
+    private startGrpcServer;
     private handleStateChange;
     /**
      * 发布全局状态（同步到其他节点）

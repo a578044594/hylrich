@@ -16,6 +16,8 @@
     "start": "node dist/entrypoints/server.js"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "axios": "^1.6.0",
     "cors": "^2.8.6",
     "express": "^4.22.1",

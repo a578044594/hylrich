@@ -7,17 +7,17 @@ export interface GrpcClientConfig {
 export declare class GrpcClient {
     private client;
     private config;
-    private stateCallbacks;
-    private activeStreams;
     constructor(config: GrpcClientConfig);
     private setupClient;
     executeTool(toolName: string, input: any): Promise<any>;
     getSystemHealth(): Promise<any>;
     streamMetrics(intervalMs: number | undefined, callback: (metrics: any) => void): () => void;
     /**
-     * 订阅状态更新流
+     * 流式接收状态更新
+     * @param callback 接收状态更新
+     * @returns 取消订阅函数
      */
-    streamStateUpdates(clientId: string, filterPrefix?: string, callback: (update: any) => void): () => void;
+    streamStateUpdates(callback: (update: any) => void): () => void;
     /**
      * 发布状态变更
      */
@@ -26,8 +26,5 @@ export declare class GrpcClient {
      * 获取当前状态快照
      */
     getCurrentState(filterPrefix?: string): Promise<Record<string, any>>;
-    /**
-     * 关闭所有连接
-     */
     close(): void;
 }

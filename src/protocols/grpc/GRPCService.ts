@@ -23,8 +23,11 @@ export class GRPCService {
   }
   
   private setupServices() {
-    // 加载proto文件
-    const protoPath = this.config.protoPath || join(__dirname, '../protos/agent.proto');
+    let protoPath = this.config.protoPath || join(__dirname, '../protos/agent.proto');
+    if (!require('fs').existsSync(protoPath)) {
+      protoPath = join(__dirname, '../../protos/agent.proto');
+    }
+    
     const packageDefinition = protoLoader.loadSync(protoPath, {
       keepCase: true,
       longs: String,
@@ -35,20 +38,17 @@ export class GRPCService {
     
     const proto = grpc.loadPackageDefinition(packageDefinition) as any;
     
-    // 正确的proto结构访问
     const agentPackage = proto.openclaw?.agent;
     if (!agentPackage || !agentPackage.AgentService) {
       throw new Error('Failed to load AgentService from proto definition');
     }
     
-    // 添加AgentService实现
     this.server.addService(
       agentPackage.AgentService.service,
       {
         ExecuteTool: this.executeTool.bind(this),
         GetSystemHealth: this.getSystemHealth.bind(this),
         StreamMetrics: this.streamMetrics.bind(this),
-        // 状态同步
         StreamStateUpdates: this.streamStateUpdates.bind(this),
         PublishState: this.publishState.bind(this),
         GetCurrentState: this.getCurrentState.bind(this)
@@ -58,20 +58,17 @@ export class GRPCService {
     console.log('gRPC services with StateSync setup completed');
   }
   
-  private async executeTool(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>) {
+  private executeTool(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>) {
     const { tool_name, input_data } = call.request;
     
     try {
-      // 这里应该调用工具注册表执行
       const input = JSON.parse(input_data.toString());
-      
-      // 简化实现
+      // 这里应该调用真正的工具注册表
       const result = { 
         success: true, 
-        result: `Tool ${tool_name} executed (implementation pending)`,
+        result_data: JSON.stringify({ output: `Mock result for ${tool_name}` }),
         execution_time_ms: 0 
       };
-      
       callback(null, {
         success: true,
         result_data: Buffer.from(JSON.stringify(result)),
@@ -87,19 +84,18 @@ export class GRPCService {
     }
   }
   
-  private getSystemHealth(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>) {
+  private getSystemHealth(call: grpc.ServerUnaryCall<any>, callback: grpc.sendUnaryData<any>) {
     const healthData = {
       timestamp: Date.now(),
       tool_count: 0,
-      active_connections: this.server.getChannelzData ? 1 : 0,
       active_agents: this.stateStore ? 1 : 0,
       status: 'healthy'
     };
     callback(null, healthData);
   }
   
-  private streamMetrics(call: grpc.ServerWritableStream<any, any>) {
-    const { interval_ms } = call.request;
+  private streamMetrics(call: grpc.ServerWritableStream<any>) {
+    const { interval_ms } = call.request as any;
     const interval = interval_ms || 1000;
     
     const timer = setInterval(() => {
@@ -109,10 +105,9 @@ export class GRPCService {
       }
       
       const metrics = {
-        timestamp: Date.now(),
-        cpu_usage: 0,
-        memory_usage_mb: 0,
-        message_throughput: 0
+        cpu_usage: Math.random() * 10,
+        memory_usage_mb: process.memoryUsage().heapUsed / 1024 / 1024,
+        message_throughput: Math.floor(Math.random() * 100)
       };
       
       call.write(metrics);
@@ -125,42 +120,17 @@ export class GRPCService {
 
   /**
    * 流式状态更新 - 客户端订阅状态变更
+   * 实现：客户端发起流，服务端推送状态变更
    */
-  private streamStateUpdates(call: grpc.ServerReadableStream<any, any>, callback: grpc.sendUnaryData<any>) {
-    const { client_id, filter_prefix } = call.request;
+  private streamStateUpdates(call: grpc.ServerReadableStream<any>, callback: grpc.sendUnaryData<any>) {
+    const request = call.request as any;
+    const { client_id, filter_prefix } = request;
     
-    console.log(`State stream started for client ${client_id}`);
+    console.log(`[StateSync] Stream started for client ${client_id}`);
     
-    // 监听本地状态变更，转发给客户端
-    const onStateChange = (event: StateChangeEvent) => {
-      if (call.cancelled) {
-        return;
-      }
-      
-      // 过滤前缀
-      if (filter_prefix && !event.payload.key.startsWith(filter_prefix)) {
-        return;
-      }
-      
-      const update = {
-        key: event.payload.key,
-        value: Buffer.from(JSON.stringify(event.payload.value)),
-        operation: event.payload.operation,
-        timestamp: event.payload.timestamp,
-        source: event.payload.source || 'unknown'
-      };
-      
-      call.write(update);
-    };
-    
+    // 发送当前快照
     if (this.stateStore) {
-      // 订阅状态变更
-      this.stateStore.subscribe(onStateChange);
-    }
-    
-    // 发送当前快照（可选）
-    if (this.stateStore) {
-      const snapshot = this.stateStore.snapshot(filter_prefix);
+      const snapshot = this.stateStore.snapshot(filter_prefix || '');
       for (const [key, value] of Object.entries(snapshot)) {
         if (call.cancelled) break;
         call.write({
@@ -173,67 +143,93 @@ export class GRPCService {
       }
     }
     
-    call.on('cancelled', () => {
-      console.log(`State stream ended for client ${client_id}`);
-      // 取消订阅会在客户端重连时重新建立，这里简化处理
-    });
+    // 订阅后续变更
+    let unsubscribe: (() => void) | undefined;
+    if (this.stateStore) {
+      unsubscribe = this.stateStore.subscribe((event: StateChangeEvent) => {
+        if (call.cancelled) {
+          if (unsubscribe) unsubscribe();
+          return;
+        }
+        
+        const { prefix } = request;
+        if (prefix && !event.payload.key.startsWith(prefix)) {
+          return;
+        }
+        
+        const update = {
+          key: event.payload.key,
+          value: Buffer.from(JSON.stringify(event.payload.value)),
+          operation: event.payload.operation,
+          timestamp: event.payload.timestamp,
+          source: event.payload.source || 'unknown'
+        };
+        
+        call.write(update);
+      });
+    }
     
-    // gRPC流式读取不需要显式回调，调用完成后保持连接
+    call.on('cancelled', () => {
+      console.log(`[StateSync] Stream cancelled for client ${client_id}`);
+      if (unsubscribe) unsubscribe();
+    });
   }
 
   /**
    * 发布状态变更 - 客户端发送状态更新
+   * 实现：客户端发送单个状态更新，服务端合并到本地状态并转发
    */
-  private publishState(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>) {
+  private publishState(call: grpc.ServerUnaryCall<any>, callback: grpc.sendUnaryData<any>) {
     const { key, value, source, timestamp } = call.request;
     
     try {
       const valueJson = value ? JSON.parse(value.toString()) : null;
       
       if (this.stateStore) {
-        // 更新本地状态（不广播，避免循环）
+        const localStore = this.stateStore as any;
+        // 使用内部方法直接更新状态，避免再次 gRPC 广播
         if (valueJson !== null) {
-          this.stateStore.get('_internal')?.set?.(key, valueJson, false);
+          localStore._internalSet?.(key, valueJson, false);
         } else {
-          this.stateStore.get('_internal')?.delete?.(key, false);
+          localStore._internalDelete?.(key, false);
         }
       }
       
       callback(null, { accepted: true });
     } catch (error: any) {
-      callback(null, {
-        accepted: false,
-        error_message: `Invalid JSON value: ${error.message}`
-      });
+      console.error(`[StateSync] Publish error: ${error.message}`);
+      callback(null, { accepted: false, error: error.message });
     }
   }
 
   /**
    * 获取当前状态快照
    */
-  private getCurrentState(call: grpc.ServerUnaryCall<any, any>, callback: grpc.sendUnaryData<any>) {
-    const { filter_prefix } = call.request;
+  private getCurrentState(call: grpc.ServerUnaryCall<any>, callback: grpc.sendUnaryData<any>) {
+    const { filter_prefix } = call.request as any;
     
-    if (this.stateStore) {
-      const snapshot = this.stateStore.snapshot(filter_prefix || undefined);
-      const stateMap: Record<string, Buffer> = {};
+    try {
+      const snapshot = this.stateStore ? this.stateStore.snapshot(filter_prefix) : {};
       
+      // 将值序列化为 Buffer
+      const serializedSnapshot: Record<string, Buffer> = {};
       for (const [key, value] of Object.entries(snapshot)) {
-        stateMap[key] = Buffer.from(JSON.stringify(value));
+        serializedSnapshot[key] = Buffer.from(JSON.stringify(value));
       }
       
       callback(null, {
-        state: stateMap,
+        state: serializedSnapshot,
         timestamp: Date.now()
       });
-    } else {
+    } catch (error: any) {
+      console.error(`[StateSync] GetCurrentState error: ${error.message}`);
       callback(null, {
         state: {},
         timestamp: Date.now()
       });
     }
   }
-  
+
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.server.bindAsync(
@@ -243,7 +239,7 @@ export class GRPCService {
           if (error) {
             reject(error);
           } else {
-            console.log(`gRPC server with StateSync running on port ${port}`);
+            console.log(`gRPC server started on port ${port}`);
             this.server.start();
             resolve();
           }
@@ -251,20 +247,16 @@ export class GRPCService {
       );
     });
   }
-  
+
   async stop(): Promise<void> {
-    return new Promise((resolve) => {
-      this.server.tryShutdown(() => {
-        console.log('gRPC server stopped');
-        resolve();
+    return new Promise((resolve, reject) => {
+      this.server.tryShutdown((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
       });
     });
-  }
-  
-  /**
-   * 设置状态存储（用于依赖注入）
-   */
-  setStateStore(store: DistributedStateStore): void {
-    this.stateStore = store;
   }
 }

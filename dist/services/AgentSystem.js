@@ -8,9 +8,11 @@ const OpenAIAgent_1 = require("./OpenAIAgent");
 const FileTools_1 = require("../tools/FileTools");
 const DistributedStateStore_1 = require("../state/DistributedStateStore");
 const GrpcClient_1 = require("../protocols/grpc/GrpcClient");
+const GrpcServerService_1 = require("./GrpcServerService");
 class AgentSystem {
     constructor() {
         this.agents = new Map();
+        this.grpcPort = 50051;
         this.eventBus = new EventBus_1.EventBus();
         this.context = new ContextManager_1.ContextManager();
         this.toolRegistry = new ToolRegistry_1.ToolRegistry();
@@ -23,6 +25,9 @@ class AgentSystem {
         this.registerDefaultTools();
         // 初始化 gRPC 客户端（连接其他节点）
         this.initGrpcClient();
+        // 初始化 gRPC 服务器（接受其他节点连接）
+        this.grpcServer = new GrpcServerService_1.GrpcServerService(this.stateStore, this.eventBus);
+        this.startGrpcServer();
         // 监听状态变更，同步到全局
         this.stateStore.subscribe((event) => {
             this.handleStateChange(event);
@@ -32,10 +37,10 @@ class AgentSystem {
         try {
             this.grpcClient = new GrpcClient_1.GrpcClient({
                 host: 'localhost',
-                port: 50051
+                port: this.grpcPort
             });
             // 订阅远程状态更新
-            this.grpcClient.streamStateUpdates(this.nodeId, '', (update) => {
+            this.grpcClient.streamStateUpdates((update) => {
                 const value = update.value ? JSON.parse(update.value.toString()) : null;
                 const event = {
                     type: 'state.changed',
@@ -49,15 +54,21 @@ class AgentSystem {
                     }
                 };
                 // 处理远程状态变更
-                const localStore = this.stateStore;
-                if (localStore['handleRemoteUpdate']) {
-                    localStore['handleRemoteUpdate'](event);
-                }
+                this.stateStore.handleRemoteUpdate?.(event);
             });
             console.log('gRPC state sync client initialized');
         }
         catch (error) {
-            console.warn('Failed to initialize gRPC client, state sync disabled:', error);
+            console.warn('Failed to initialize gRPC client:', error.message);
+        }
+    }
+    async startGrpcServer() {
+        try {
+            await this.grpcServer.start(this.grpcPort);
+            console.log(`gRPC state sync server started on port ${this.grpcPort}`);
+        }
+        catch (error) {
+            console.warn('Failed to start gRPC server:', error.message);
         }
     }
     handleStateChange(event) {
@@ -72,7 +83,12 @@ class AgentSystem {
         this.stateStore.set(key, value, false); // 本地不广播，由我们统一控制
         // 广播到其他节点
         if (this.grpcClient) {
-            return await this.grpcClient.publishState(key, value, this.nodeId);
+            try {
+                return await this.grpcClient.publishState(key, value, this.nodeId);
+            }
+            catch (error) {
+                console.warn('Failed to publish state to remote nodes:', error.message);
+            }
         }
         return true;
     }
@@ -88,10 +104,13 @@ class AgentSystem {
     subscribeState(callback) {
         return this.stateStore.subscribe(callback);
     }
-    // 其他方法保持不变...
     registerDefaultTools() {
-        this.toolRegistry.register(FileTools_1.FileWriteTool.definition, FileTools_1.FileWriteTool.execute);
-        this.toolRegistry.register(FileTools_1.FileReadTool.definition, FileTools_1.FileReadTool.execute);
+        if (FileTools_1.FileWriteTool.definition && FileTools_1.FileWriteTool.execute) {
+            this.toolRegistry.register(FileTools_1.FileWriteTool.definition, FileTools_1.FileWriteTool.execute);
+        }
+        if (FileTools_1.FileReadTool.definition && FileTools_1.FileReadTool.execute) {
+            this.toolRegistry.register(FileTools_1.FileReadTool.definition, FileTools_1.FileReadTool.execute);
+        }
     }
     async createAgent(config) {
         let agent;

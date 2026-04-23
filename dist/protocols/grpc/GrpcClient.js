@@ -39,17 +39,13 @@ const protoLoader = __importStar(require("@grpc/proto-loader"));
 const path_1 = require("path");
 class GrpcClient {
     constructor(config) {
-        this.stateCallbacks = new Map();
-        this.activeStreams = new Set();
         this.config = config;
         this.setupClient();
     }
     setupClient() {
-        // 加载proto文件 - 支持多个可能的路径
-        let protoPath = (0, path_1.join)(__dirname, '../protos/agent.proto');
+        let protoPath = (0, path_1.join)(__dirname, '../../protos/agent.proto');
         if (!require('fs').existsSync(protoPath)) {
-            // 如果不存在，尝试项目根目录
-            protoPath = (0, path_1.join)(__dirname, '../../protos/agent.proto');
+            protoPath = (0, path_1.join)(__dirname, '../../../protos/agent.proto');
         }
         const packageDefinition = protoLoader.loadSync(protoPath, {
             keepCase: true,
@@ -59,12 +55,10 @@ class GrpcClient {
             oneofs: true
         });
         const proto = grpc.loadPackageDefinition(packageDefinition);
-        // 正确的proto结构访问
         const agentPackage = proto.openclaw?.agent;
         if (!agentPackage || !agentPackage.AgentService) {
             throw new Error('Failed to load AgentService from proto definition');
         }
-        // 创建客户端
         this.client = new agentPackage.AgentService(`${this.config.host}:${this.config.port}`, this.config.credentials || grpc.credentials.createInsecure());
     }
     async executeTool(toolName, input) {
@@ -110,99 +104,72 @@ class GrpcClient {
         call.on('end', () => {
             console.log('gRPC stream ended');
         });
-        this.activeStreams.add(call);
-        // 返回取消函数
         return () => {
             call.cancel();
-            this.activeStreams.delete(call);
         };
     }
     /**
-     * 订阅状态更新流
+     * 流式接收状态更新
+     * @param callback 接收状态更新
+     * @returns 取消订阅函数
      */
-    streamStateUpdates(clientId, filterPrefix, callback) {
-        const call = this.client.StreamStateUpdates({
-            client_id: clientId,
-            filter_prefix: filterPrefix || ''
-        });
+    streamStateUpdates(callback) {
+        const call = this.client.StreamStateUpdates({});
         call.on('data', (update) => {
             callback(update);
         });
         call.on('error', (error) => {
-            console.error('State stream error:', error);
+            console.error('State sync stream error:', error);
         });
         call.on('end', () => {
-            console.log('State stream ended');
+            console.log('State sync stream ended');
         });
-        this.activeStreams.add(call);
-        this.stateCallbacks.set(clientId, callback);
-        // 返回取消函数
         return () => {
             call.cancel();
-            this.activeStreams.delete(call);
-            this.stateCallbacks.delete(clientId);
         };
     }
     /**
      * 发布状态变更
      */
     async publishState(key, value, source) {
-        try {
-            const response = await new Promise((resolve, reject) => {
-                this.client.PublishState({
-                    key,
-                    value: Buffer.from(JSON.stringify(value)),
-                    source,
-                    timestamp: Date.now()
-                }, (error, response) => {
-                    if (error)
-                        reject(error);
-                    else
-                        resolve(response);
-                });
+        return new Promise((resolve, reject) => {
+            this.client.PublishState({
+                key,
+                value: JSON.stringify(value),
+                source,
+                timestamp: Date.now()
+            }, (error, response) => {
+                if (error) {
+                    reject(error);
+                }
+                else {
+                    resolve(response.accepted);
+                }
             });
-            return response.accepted;
-        }
-        catch (error) {
-            console.error('Publish state failed:', error);
-            return false;
-        }
+        });
     }
     /**
      * 获取当前状态快照
      */
     async getCurrentState(filterPrefix) {
-        try {
-            const response = await new Promise((resolve, reject) => {
-                this.client.GetCurrentState({ filter_prefix: filterPrefix || '' }, (error, response) => {
-                    if (error)
-                        reject(error);
-                    else
-                        resolve(response);
-                });
-            });
-            const snapshot = {};
-            if (response.state) {
-                for (const [key, value] of Object.entries(response.state)) {
-                    snapshot[key] = JSON.parse(value.toString());
+        return new Promise((resolve, reject) => {
+            this.client.GetCurrentState({ filter_prefix: filterPrefix || '' }, (error, response) => {
+                if (error) {
+                    reject(error);
                 }
-            }
-            return { snapshot, timestamp: response.timestamp };
-        }
-        catch (error) {
-            console.error('Get state snapshot failed:', error);
-            return { snapshot: {}, timestamp: Date.now() };
-        }
+                else {
+                    const snapshot = {};
+                    for (const [key, buffer] of Object.entries(response.state || {})) {
+                        snapshot[key] = JSON.parse(buffer.toString());
+                    }
+                    resolve(snapshot);
+                }
+            });
+        });
     }
-    /**
-     * 关闭所有连接
-     */
     close() {
-        for (const stream of this.activeStreams) {
-            stream.cancel();
-        }
-        this.activeStreams.clear();
-        grpc.closeClient(this.client);
+        // grpc-js does not have closeClient, just keep the object
+        // The client streams will close when cancelled
     }
 }
 exports.GrpcClient = GrpcClient;

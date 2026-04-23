@@ -9,9 +9,21 @@ class DistributedStateStore {
     constructor(config) {
         this.state = new Map();
         this.subscribers = new Set();
+        // 内部引用，用于 gRPC 服务
+        this._internal = {
+            set: (key, value, broadcast) => {
+                this.state.set(key, value);
+                if (broadcast)
+                    this.emitChange(key, value, 'set');
+            },
+            delete: (key, broadcast) => {
+                this.state.delete(key);
+                if (broadcast)
+                    this.emitChange(key, null, 'delete');
+            }
+        };
         this.nodeId = config.nodeId;
         this.eventBus = config.eventBus;
-        // 监听本地状态变更事件（用于接收其他 agent 的更新）
         if (this.eventBus) {
             this.eventBus.on('state.update', (event) => {
                 this.handleRemoteUpdate(event);
@@ -22,10 +34,7 @@ class DistributedStateStore {
      * 设置状态值（本地）
      */
     set(key, value, broadcast = true) {
-        this.state.set(key, value);
-        if (broadcast) {
-            this.emitChange(key, value, 'set');
-        }
+        this._internal.set(key, value, broadcast);
     }
     /**
      * 获取状态值
@@ -37,10 +46,7 @@ class DistributedStateStore {
      * 删除状态键
      */
     delete(key, broadcast = true) {
-        this.state.delete(key);
-        if (broadcast) {
-            this.emitChange(key, null, 'delete');
-        }
+        this._internal.delete(key, broadcast);
     }
     /**
      * 获取完整快照
@@ -60,7 +66,6 @@ class DistributedStateStore {
      */
     subscribe(callback) {
         this.subscribers.add(callback);
-        // 返回取消订阅函数
         return () => {
             this.subscribers.delete(callback);
         };
@@ -70,7 +75,7 @@ class DistributedStateStore {
      */
     handleRemoteUpdate(event) {
         const { key, value, operation, timestamp, source } = event.payload;
-        // 忽略自己发出的更新（避免循环）
+        // 忽略自己发出的更新
         if (source === this.nodeId) {
             return;
         }

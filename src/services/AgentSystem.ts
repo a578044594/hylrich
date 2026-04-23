@@ -8,6 +8,7 @@ import { OpenAIAgent } from './OpenAIAgent';
 import { FileWriteTool, FileReadTool } from '../tools/FileTools';
 import { DistributedStateStore, StateChangeEvent } from '../state/DistributedStateStore';
 import { GrpcClient } from '../protocols/grpc/GrpcClient';
+import { GrpcServerService } from './GrpcServerService';
 
 export class AgentSystem {
   private agents: Map<string, BaseAgent> = new Map();
@@ -16,7 +17,9 @@ export class AgentSystem {
   private context: ContextManager;
   private stateStore: DistributedStateStore;
   private grpcClient?: GrpcClient;
+  private grpcServer?: GrpcServerService;
   private nodeId: string;
+  private grpcPort: number = 50051;
 
   constructor() {
     this.eventBus = new EventBus();
@@ -35,6 +38,10 @@ export class AgentSystem {
     // 初始化 gRPC 客户端（连接其他节点）
     this.initGrpcClient();
     
+    // 初始化 gRPC 服务器（接受其他节点连接）
+    this.grpcServer = new GrpcServerService(this.stateStore, this.eventBus);
+    this.startGrpcServer();
+    
     // 监听状态变更，同步到全局
     this.stateStore.subscribe((event: StateChangeEvent) => {
       this.handleStateChange(event);
@@ -45,35 +52,43 @@ export class AgentSystem {
     try {
       this.grpcClient = new GrpcClient({
         host: 'localhost',
-        port: 50051
+        port: this.grpcPort
       });
 
       // 订阅远程状态更新
-      this.grpcClient.streamStateUpdates(this.nodeId, '', (update: any) => {
-        const value = update.value ? JSON.parse(update.value.toString()) : null;
-        
-        const event: StateChangeEvent = {
-          type: 'state.changed',
-          timestamp: update.timestamp,
-          payload: {
-            key: update.key,
-            value: value,
-            operation: update.operation,
+      this.grpcClient.streamStateUpdates(
+        (update: any) => {
+          const value = update.value ? JSON.parse(update.value.toString()) : null;
+          
+          const event: StateChangeEvent = {
+            type: 'state.changed',
             timestamp: update.timestamp,
-            source: update.source
-          }
-        };
-        
-        // 处理远程状态变更
-        const localStore = this.stateStore as any;
-        if (localStore['handleRemoteUpdate']) {
-          localStore['handleRemoteUpdate'](event);
+            payload: {
+              key: update.key,
+              value: value,
+              operation: update.operation,
+              timestamp: update.timestamp,
+              source: update.source
+            }
+          };
+          
+          // 处理远程状态变更
+          (this.stateStore as any).handleRemoteUpdate?.(event);
         }
-      });
+      );
 
       console.log('gRPC state sync client initialized');
-    } catch (error) {
-      console.warn('Failed to initialize gRPC client, state sync disabled:', error);
+    } catch (error: any) {
+      console.warn('Failed to initialize gRPC client:', error.message);
+    }
+  }
+
+  private async startGrpcServer(): Promise<void> {
+    try {
+      await this.grpcServer!.start(this.grpcPort);
+      console.log(`gRPC state sync server started on port ${this.grpcPort}`);
+    } catch (error: any) {
+      console.warn('Failed to start gRPC server:', error.message);
     }
   }
 
@@ -91,7 +106,11 @@ export class AgentSystem {
     
     // 广播到其他节点
     if (this.grpcClient) {
-      return await this.grpcClient.publishState(key, value, this.nodeId);
+      try {
+        return await this.grpcClient.publishState(key, value, this.nodeId);
+      } catch (error: any) {
+        console.warn('Failed to publish state to remote nodes:', error.message);
+      }
     }
     
     return true;
@@ -111,10 +130,13 @@ export class AgentSystem {
     return this.stateStore.subscribe(callback);
   }
 
-  // 其他方法保持不变...
   private registerDefaultTools() {
-    this.toolRegistry.register(FileWriteTool.definition, FileWriteTool.execute);
-    this.toolRegistry.register(FileReadTool.definition, FileReadTool.execute);
+    if (FileWriteTool.definition && FileWriteTool.execute) {
+      this.toolRegistry.register(FileWriteTool.definition, FileWriteTool.execute);
+    }
+    if (FileReadTool.definition && FileReadTool.execute) {
+      this.toolRegistry.register(FileReadTool.definition, FileReadTool.execute);
+    }
   }
 
   async createAgent(config: AgentConfig): Promise<Agent> {
