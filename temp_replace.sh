@@ -1,9 +1,0 @@
-#!/bin/bash
-# Script to replace startSyncLoop method in StateSyncService.ts
-
-FILE="src/services/state/StateSyncService.ts"
-TEMP_FILE="temp_state.ts"
-
-# Read the file and replace the startSyncLoop method
-sed '/private startSyncLoop(): void {/,/^  }/c\
-  private startSyncLoop(): void {\n    // 定期同步本地状态到其他节点\n    setInterval(async () => {\n      const states = Array.from(this.stateManager.states.entries());\n      console.log(`同步 ${states.length} 个状态到其他节点...`);\n      for (const [key, state] of states) {\n        try {\n          await this.grpcClient.call('syncState', {\n            nodeId: this.config.nodeId,\n            state: {\n              key,\n              value: state.value,\n              version: state.version,\n              timestamp: state.timestamp\n            }\n          });\n        } catch (error) {\n          console.error(`同步状态 ${key} 失败:`, error);\n        }\n      }\n    }, this.config.syncInterval || 3000);\n\n    // 定期从其他节点获取状态更新\n    setInterval(async () => {\n      console.log(`从其他节点获取状态更新...`);\n      const nodes = this.stateManager.listNodes();\n      for (const node of nodes) {\n        if (node.id !== this.config.nodeId) {\n          try {\n            const remoteStates = await this.grpcClient.call('getStates', {\n              nodeId: this.config.nodeId\n            });\n            if (remoteStates && remoteStates.length > 0) {\n              for (const remoteState of remoteStates) {\n                const localState = this.stateManager.getState(remoteState.key);\n                if (!localState || remoteState.version > localState.version) {\n                  this.stateManager.processStateUpdate(remoteState);\n                }\n              }\n            }\n          } catch (error) {\n            console.error(`从节点 ${node.id} 获取状态失败:`, error);\n          }\n        }\n      }\n    }, this.config.syncInterval || 3000);\n  }' "$FILE" > "$TEMP_FILE" && mv "$TEMP_FILE" "$FILE"

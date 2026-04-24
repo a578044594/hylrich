@@ -1,87 +1,77 @@
 syntax = "proto3";
 
-package agent;
+package openclaw.agent;
 
 service AgentService {
-  rpc ExecuteTool (ToolRequest) returns (ToolResponse);
-  rpc GetMetrics (MetricsRequest) returns (MetricsResponse);
-  rpc HealthCheck (HealthRequest) returns (HealthResponse);
-  // 状态同步相关
+  rpc ExecuteTool (ExecuteToolRequest) returns (ExecuteToolResponse);
+  rpc GetSystemHealth (HealthRequest) returns (HealthResponse);
+  rpc StreamMetrics (MetricsStreamRequest) returns (stream MetricsData);
   rpc StreamStateUpdates (StateStreamRequest) returns (stream StateUpdate);
-  rpc PublishState (StatePublishRequest) returns (StateAck);
+  rpc PublishState (StateUpdateRequest) returns (StateUpdateResponse);
   rpc GetCurrentState (StateSnapshotRequest) returns (StateSnapshotResponse);
 }
 
-// 工具执行
-message ToolRequest {
+message ExecuteToolRequest {
   string tool_name = 1;
   bytes input_data = 2;
 }
 
-message ToolResponse {
+message ExecuteToolResponse {
   bool success = 1;
   bytes result_data = 2;
   string error_message = 3;
-  int64 execution_time_ms = 4;
+  int32 execution_time_ms = 4;
 }
 
-// 指标相关
-message MetricsRequest {
-  string metric_name = 1;
-}
-
-message MetricsResponse {
-  map<string, MetricSummary> summaries = 1;
-}
-
-message MetricSummary {
-  int64 count = 1;
-  double sum = 2;
-  double average = 3;
-  double min = 4;
-  double max = 5;
-}
-
-// 健康检查
 message HealthRequest {}
 
 message HealthResponse {
-  string status = 1;
-  string timestamp = 2;
-  map<string, bool> services = 3;
+  int64 timestamp = 1;
+  int32 tool_count = 2;
+  int32 active_agents = 3;
+  string status = 4;
 }
 
-// 状态同步消息
+message MetricsStreamRequest {
+  int32 interval_ms = 1;
+}
+
+message MetricsData {
+  double cpu_usage = 1;
+  double memory_usage_mb = 2;
+  int32 message_throughput = 3;
+}
+
 message StateStreamRequest {
-  string client_id = 1;      // 客户端唯一标识
-  string filter_prefix = 2;  // 状态键过滤前缀（可选）
+  string client_id = 1;
+  string filter_prefix = 2;
 }
 
 message StateUpdate {
-  string key = 1;           // 状态键
-  bytes value = 2;          // 状态值（JSON序列化）
-  string operation = 3;     // "set" | "delete"
-  int64 timestamp = 4;      // 时间戳
-  string source = 5;        // 状态源（agent ID）
-}
-
-message StatePublishRequest {
   string key = 1;
   bytes value = 2;
-  string source = 3;        // agent ID
+  string operation = 3;
+  int64 timestamp = 4;
+  string source = 5;
+}
+
+message StateUpdateRequest {
+  string key = 1;
+  bytes value = 2;
+  string source = 3;
   int64 timestamp = 4;
 }
 
-message StateAck {
+message StateUpdateResponse {
   bool accepted = 1;
-  string error_message = 2;
+  string error = 2;
 }
 
 message StateSnapshotRequest {
-  string filter_prefix = 2;  // 可选过滤
+  string filter_prefix = 1;
 }
 
 message StateSnapshotResponse {
-  map<string, bytes> state = 1;  // 完整状态快照
+  map<string, bytes> state = 1;
   int64 timestamp = 2;
 }

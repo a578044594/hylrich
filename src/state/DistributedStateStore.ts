@@ -23,19 +23,28 @@ export interface DistributedStateStoreConfig {
  */
 export class DistributedStateStore {
   private state: Map<string, any> = new Map();
+  private versions: Map<string, number> = new Map();
   private nodeId: string;
   private eventBus?: EventBus;
   private subscribers: Set<(event: StateChangeEvent) => void> = new Set();
 
   // 内部引用，用于 gRPC 服务
   private _internal = {
-    set: (key: string, value: any, broadcast: boolean) => {
+    set: (key: string, value: any, broadcast: boolean, timestamp: number = Date.now()) => {
+      if (!this.shouldApplyUpdate(key, timestamp)) {
+        return;
+      }
       this.state.set(key, value);
-      if (broadcast) this.emitChange(key, value, 'set');
+      this.versions.set(key, timestamp);
+      if (broadcast) this.emitChange(key, value, 'set', undefined, timestamp);
     },
-    delete: (key: string, broadcast: boolean) => {
+    delete: (key: string, broadcast: boolean, timestamp: number = Date.now()) => {
+      if (!this.shouldApplyUpdate(key, timestamp)) {
+        return;
+      }
       this.state.delete(key);
-      if (broadcast) this.emitChange(key, null, 'delete');
+      this.versions.set(key, timestamp);
+      if (broadcast) this.emitChange(key, null, 'delete', undefined, timestamp);
     }
   };
 
@@ -44,7 +53,7 @@ export class DistributedStateStore {
     this.eventBus = config.eventBus;
     
     if (this.eventBus) {
-      this.eventBus.on('state.update', (event: any) => {
+      this.eventBus.on('state.changed', (event: any) => {
         this.handleRemoteUpdate(event);
       });
     }
@@ -102,9 +111,14 @@ export class DistributedStateStore {
    */
   private handleRemoteUpdate(event: any): void {
     const { key, value, operation, timestamp, source } = event.payload;
+    const eventTimestamp = timestamp || Date.now();
     
     // 忽略自己发出的更新
     if (source === this.nodeId) {
+      return;
+    }
+
+    if (!this.shouldApplyUpdate(key, eventTimestamp)) {
       return;
     }
 
@@ -113,23 +127,43 @@ export class DistributedStateStore {
     } else if (operation === 'delete') {
       this.state.delete(key);
     }
+    this.versions.set(key, eventTimestamp);
 
     // 本地也触发变更事件，让其他订阅者知晓
-    this.emitChange(key, value, operation, source);
+    this.emitChange(key, value, operation, source, eventTimestamp);
+  }
+
+  /**
+   * 对外暴露：应用远程状态更新事件
+   */
+  applyRemoteUpdate(event: StateChangeEvent): void {
+    this.handleRemoteUpdate(event);
+  }
+
+  /**
+   * 对外暴露：复制远端状态到本地，不触发广播（用于 gRPC 同步）
+   */
+  applyReplicaState(key: string, value: any, operation: 'set' | 'delete', timestamp?: number): void {
+    if (operation === 'set') {
+      this._internal.set(key, value, false, timestamp);
+    } else {
+      this._internal.delete(key, false, timestamp);
+    }
   }
 
   /**
    * 发送状态变更事件
    */
-  private emitChange(key: string, value: any, operation: 'set' | 'delete', source?: string): void {
+  private emitChange(key: string, value: any, operation: 'set' | 'delete', source?: string, timestamp?: number): void {
+    const eventTimestamp = timestamp || Date.now();
     const event: StateChangeEvent = {
       type: 'state.changed',
-      timestamp: Date.now(),
+      timestamp: eventTimestamp,
       payload: {
         key,
         value,
         operation,
-        timestamp: Date.now(),
+        timestamp: eventTimestamp,
         source: source || this.nodeId
       }
     };
@@ -159,5 +193,11 @@ export class DistributedStateStore {
    */
   clear(): void {
     this.state.clear();
+    this.versions.clear();
+  }
+
+  private shouldApplyUpdate(key: string, incomingTimestamp: number): boolean {
+    const currentVersion = this.versions.get(key) || 0;
+    return incomingTimestamp >= currentVersion;
   }
 }

@@ -1,105 +1,138 @@
-# 🚀 Hylrich - 下一代AI Agent管理系统
+# Hylrich Agent System
 
-## 📋 项目概述
+一个基于 TypeScript 的 Agent 管理系统，当前提供：
 
-Hylrich是一个基于OpenClaw和Claude Code Aini架构的全新AI Agent管理系统，专注于高性能、可扩展性和生产级可靠性。
+- HTTP API（健康检查、状态、Agent 管理、工具执行、聊天）
+- gRPC 服务（工具执行、健康检查、指标流、状态同步）
+- 分布式状态存储（本地状态 + 事件同步）
+- OpenAI Agent 基础对话能力
+- 文件读写工具（`file_read` / `file_write`）
+  - 默认启用 `TOOL_ROOT_DIR` 沙箱边界，防止越界读写
 
-## 🎯 核心特性
+---
 
-- **高性能通信**: WebSocket消息总线支持10,000+ msg/sec吞吐量
-- **增强版MCP协议**: 完整的性能监控、安全控制和错误处理
-- **TypeScript全栈**: 完整的类型安全和现代开发体验
-- **实时监控**: 执行历史记录和性能统计分析
-- **自动恢复**: 智能重连机制和故障恢复
-- **生产就绪**: 完善的错误处理和资源管理
+## 当前状态（2026-04）
 
-## 🏗️ 架构设计
+项目已具备可运行主链路，并补充了 smoke 测试用于真实接口验证。
 
-### 核心模块
+已落地：
 
-1. **Core (核心层)**
-   - `Tool` - 工具基类，提供统一的执行接口
-   - 性能监控和统计功能
+- `typecheck`：类型检查
+- `build`：构建并复制 proto
+- `smoke`：启动服务并验证 `/health`、`/status`、`/agents`、`/tool`
 
-2. **Protocols (协议层)**
-   - `WebSocketBus` - 高性能WebSocket通信总线
-   - 消息队列管理和自动重连
+仍在持续优化：
 
-3. **Tools (工具层)**
-   - `EnhancedMCPTool` - 增强版MCP协议实现
-   - 执行历史记录和性能报告
+- gRPC 观测指标真实性（当前 `StreamMetrics` 仍为模拟值）
+- 分布式状态同步一致性与冲突策略
+- 工具层安全沙箱（路径白名单、权限边界）
+- 文档与测试覆盖率进一步完善
 
-4. **Services (服务层)**
-   - Agent调度和管理
-   - 资源监控和限制
+---
 
-## 🚀 快速开始
+## 快速开始
 
-### 安装依赖
+### 1) 安装依赖
+
 ```bash
 npm install
 ```
 
-### 构建项目
+### 2) 类型检查
+
+```bash
+npm run typecheck
+```
+
+### 3) 构建
+
 ```bash
 npm run build
 ```
 
-### 开发模式
+### 4) 启动服务
+
 ```bash
-npm run dev
+npm start
 ```
 
-## 📊 技术栈
+可通过环境变量指定地址：
 
-- **语言**: TypeScript 5.4+
-- **运行时**: Node.js 18+
-- **通信**: WebSocket with ws library
-- **构建**: TypeScript Compiler
-- **测试**: Jest + ts-jest
-- **代码质量**: ESLint + TypeScript ESLint
+```bash
+HOST=127.0.0.1 PORT=8090 npm start
+```
 
-## 🔧 开发准则
+文件工具安全根目录（可选，默认当前工作目录）：
 
-1. **真实操作**: 所有开发必须实际执行，禁止模拟测试
-2. **完整证据**: 每次进度汇报必须有完整的代码提交证明
-3. **质量优先**: 不因进度缩短开发周期或降低质量标准
-4. **可溯源**: 所有操作必须git commit记录，可完整溯源
-5. **失败反馈**: 及时报告失败并分析原因，不掩盖问题
+```bash
+TOOL_ROOT_DIR=/workspace/hylrich/data npm start
+```
 
-## 📈 项目状态
+### 5) 运行冒烟测试（推荐）
 
-### 已完成
-- ✅ 项目基础结构搭建
-- ✅ Core工具基类实现
-- ✅ WebSocket通信协议
-- ✅ 增强版MCP工具协议
-- ✅ TypeScript配置和构建系统
-
-### 进行中
-- 🔄 Agent调度管理系统
-- 🔄 资源监控和限制功能
-- 🔄 完整的测试套件
-- 🔄 文档和完善
-
-## 🤝 贡献指南
-
-1. Fork本项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开Pull Request
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
-
-## 👥 开发团队
-
-- 项目负责人: @a578044594
-- 核心架构师: Hylrich AI System
-- 技术支持: OpenClaw & Claude Code Aini
+```bash
+npm run smoke
+```
 
 ---
 
-**🚀 下一代AI Agent管理，从这里开始！**
+## HTTP API
+
+默认地址：`http://0.0.0.0:8090`
+
+- `GET /health`
+- `GET /status`
+- `GET /agents`
+- `POST /agents`
+- `POST /tool`
+- `POST /chat`
+
+---
+
+## 目录结构（核心）
+
+```text
+src/
+  core/                 # 核心编排层
+  entrypoints/server.ts # HTTP 入口
+  protocols/grpc/       # gRPC 协议层
+  services/             # AgentSystem / OpenAI / ToolRegistry
+  state/                # 分布式状态存储
+  tools/                # 文件工具
+protos/agent.proto      # gRPC 协议定义
+scripts/build.sh
+scripts/smoke-test.sh
+```
+
+---
+
+## 后续开发阶段（执行中）
+
+### Phase A（当前重点）
+
+- 协议与实现收敛（减少 mock，增强真实执行）
+- 启动生命周期显式化（`start/stop`）
+- 测试分层（core / integration / smoke）
+
+### Phase B
+
+- 指标与健康检查真实化
+- 状态同步一致性增强（冲突与重放策略）
+- 错误处理标准化（重试、超时、降级）
+
+### Phase C
+
+- 工具安全沙箱
+- Agent 工具调用策略层（tool-calling）
+- 生产化部署与可观测性完善
+
+---
+
+## 脚本
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run dev`
+- `npm test`
+- `npm run test:core`
+- `npm run smoke`
