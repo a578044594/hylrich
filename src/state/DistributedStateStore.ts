@@ -130,7 +130,7 @@ export class DistributedStateStore {
     this.versions.set(key, eventTimestamp);
 
     // 本地也触发变更事件，让其他订阅者知晓
-    this.emitChange(key, value, operation, source, eventTimestamp, false);
+
   }
 
   /**
@@ -154,14 +154,7 @@ export class DistributedStateStore {
   /**
    * 发送状态变更事件
    */
-  private emitChange(
-    key: string,
-    value: any,
-    operation: 'set' | 'delete',
-    source?: string,
-    timestamp?: number,
-    publishToEventBus: boolean = true
-  ): void {
+
     const eventTimestamp = timestamp || Date.now();
     const event: StateChangeEvent = {
       type: 'state.changed',

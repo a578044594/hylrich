@@ -8,7 +8,7 @@
 - OpenAI Agent 基础对话能力
 - 文件读写工具（`file_read` / `file_write`）
   - 默认启用 `TOOL_ROOT_DIR` 沙箱边界，防止越界读写
-- OpenAI Agent Tool-calling 策略层（自动函数调用 + 工具执行回写）
+
 
 ---
 
@@ -124,7 +124,7 @@ scripts/smoke-test.sh
 ### Phase C
 
 - 工具安全沙箱
-- Agent 工具调用策略层（tool-calling，已接入首版）
+
 - 生产化部署与可观测性完善
 
 ---
