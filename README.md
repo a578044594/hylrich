@@ -9,6 +9,7 @@
 - 文件读写工具（`file_read` / `file_write`）
   - 默认启用 `TOOL_ROOT_DIR` 沙箱边界，防止越界读写
 
+
 ---
 
 ## 当前状态（2026-04）
@@ -123,7 +124,7 @@ scripts/smoke-test.sh
 ### Phase C
 
 - 工具安全沙箱
-- Agent 工具调用策略层（tool-calling）
+
 - 生产化部署与可观测性完善
 
 ---
