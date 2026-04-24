@@ -1,4 +1,4 @@
-import * as grpc from '@grpc/grpc-js';
+import { Server, ServerCredentials, loadPackageDefinition, credentials } from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { join } from 'path';
 import { DistributedStateStore } from '../../state/DistributedStateStore';
@@ -11,14 +11,14 @@ export interface GRPCServiceConfig {
 }
 
 export class GRPCService {
-  private server: grpc.Server;
+  private server: Server;
   private config: GRPCServiceConfig;
   private stateStore?: DistributedStateStore;
   
   constructor(config: GRPCServiceConfig) {
     this.config = config;
     this.stateStore = config.stateStore;
-    this.server = new grpc.Server();
+    this.server = new Server();
     this.setupServices();
   }
   
@@ -32,11 +32,10 @@ export class GRPCService {
       keepCase: true,
       longs: String,
       enums: String,
-      defaults: true,
       oneofs: true
     });
     
-    const proto = grpc.loadPackageDefinition(packageDefinition) as any;
+    const proto = loadPackageDefinition(packageDefinition) as any;
     
     const agentPackage = proto.openclaw?.agent;
     if (!agentPackage || !agentPackage.AgentService) {
@@ -231,7 +230,7 @@ export class GRPCService {
     return new Promise((resolve, reject) => {
       this.server.bindAsync(
         `0.0.0.0:${this.config.port}`,
-        grpc.ServerCredentials.createInsecure(),
+        ServerCredentials.createInsecure(),
         (error, port) => {
           if (error) {
             reject(error);
