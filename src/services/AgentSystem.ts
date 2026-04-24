@@ -10,6 +10,13 @@ import { DistributedStateStore, StateChangeEvent } from '../state/DistributedSta
 import { GrpcClient } from '../protocols/grpc/GrpcClient';
 import { GrpcServerService } from './GrpcServerService';
 
+export interface AgentSystemOptions {
+  autoStart?: boolean;
+  grpcHost?: string;
+  grpcPort?: number;
+  grpcEnabled?: boolean;
+}
+
 export class AgentSystem {
   private agents: Map<string, BaseAgent> = new Map();
   public readonly toolRegistry: ToolRegistry;
@@ -20,12 +27,20 @@ export class AgentSystem {
   private grpcServer?: GrpcServerService;
   private nodeId: string;
   private grpcPort: number = 50051;
+  private grpcHost: string = 'localhost';
+  private grpcEnabled: boolean = true;
+  private started = false;
+  private remoteStateUnsubscribe?: () => void;
+  private localStateUnsubscribe?: () => void;
 
-  constructor() {
+  constructor(options?: AgentSystemOptions) {
     this.eventBus = new EventBus();
     this.context = new ContextManager();
     this.toolRegistry = new ToolRegistry();
     this.nodeId = `node-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    this.grpcPort = options?.grpcPort ?? this.grpcPort;
+    this.grpcHost = options?.grpcHost ?? this.grpcHost;
+    this.grpcEnabled = options?.grpcEnabled ?? true;
     
     // 初始化分布式状态存储
     this.stateStore = new DistributedStateStore({
@@ -34,29 +49,53 @@ export class AgentSystem {
     });
     
     this.registerDefaultTools();
-    
-    // 初始化 gRPC 客户端（连接其他节点）
-    this.initGrpcClient();
-    
-    // 初始化 gRPC 服务器（接受其他节点连接）
-    this.grpcServer = new GrpcServerService(this.stateStore, this.eventBus);
-    this.startGrpcServer();
-    
-    // 监听状态变更，同步到全局
-    this.stateStore.subscribe((event: StateChangeEvent) => {
-      this.handleStateChange(event);
-    });
+
+    if (options?.autoStart !== false) {
+      void this.start();
+    }
   }
 
-  private async initGrpcClient() {
+  async start(): Promise<void> {
+    if (this.started) {
+      return;
+    }
+    this.started = true;
+
+    // 监听状态变更，同步到全局
+    this.localStateUnsubscribe = this.stateStore.subscribe((event: StateChangeEvent) => {
+      this.handleStateChange(event);
+    });
+
+    if (!this.grpcEnabled) {
+      return;
+    }
+
+    await this.initGrpcClient();
+    this.grpcServer = new GrpcServerService(this.stateStore, this.eventBus, this.toolRegistry);
+    await this.startGrpcServer();
+  }
+
+  async stop(): Promise<void> {
+    this.remoteStateUnsubscribe?.();
+    this.remoteStateUnsubscribe = undefined;
+    this.localStateUnsubscribe?.();
+    this.localStateUnsubscribe = undefined;
+    this.grpcClient?.close();
+    this.grpcClient = undefined;
+    await this.grpcServer?.stop();
+    this.grpcServer = undefined;
+    this.started = false;
+  }
+
+  private async initGrpcClient(): Promise<void> {
     try {
       this.grpcClient = new GrpcClient({
-        host: 'localhost',
+        host: this.grpcHost,
         port: this.grpcPort
       });
 
       // 订阅远程状态更新
-      this.grpcClient.streamStateUpdates(
+      this.remoteStateUnsubscribe = this.grpcClient.streamStateUpdates(
         (update: any) => {
           const value = update.value ? JSON.parse(update.value.toString()) : null;
           
@@ -73,7 +112,7 @@ export class AgentSystem {
           };
           
           // 处理远程状态变更
-          (this.stateStore as any).handleRemoteUpdate?.(event);
+          this.stateStore.applyRemoteUpdate(event);
         }
       );
 
@@ -126,7 +165,7 @@ export class AgentSystem {
   /**
    * 订阅全局状态变更
    */
-  subscribeState(callback: (event: StateChangeEvent) => () => void): () => void {
+  subscribeState(callback: (event: StateChangeEvent) => void): () => void {
     return this.stateStore.subscribe(callback);
   }
 

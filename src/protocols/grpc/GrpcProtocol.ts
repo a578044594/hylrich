@@ -21,7 +21,7 @@ export class GrpcProtocol {
       this.server.bindAsync(
         `${this.config.host}:${this.config.port}`,
         this.config.credentials || grpc.ServerCredentials.createInsecure(),
-        (error, port) => {
+        (error: Error | null, port: number) => {
           if (error) {
             reject(error);
           } else {
@@ -35,7 +35,7 @@ export class GrpcProtocol {
 
   async stop(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.server.tryShutdown((error) => {
+      this.server.tryShutdown((error?: Error) => {
         if (error) {
           reject(error);
         } else {

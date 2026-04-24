@@ -1,6 +1,7 @@
-import { Server, ServerCredentials, loadPackageDefinition, credentials } from '@grpc/grpc-js';
+import { Server, ServerCredentials, loadPackageDefinition } from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { join } from 'path';
+import * as os from 'os';
 import { DistributedStateStore } from '../../state/DistributedStateStore';
 import { StateChangeEvent } from '../../state/DistributedStateStore';
 
@@ -8,16 +9,22 @@ export interface GRPCServiceConfig {
   port: number;
   protoPath?: string;
   stateStore?: DistributedStateStore;
+  toolExecutor?: (toolName: string, input: any) => Promise<any>;
 }
 
 export class GRPCService {
   private server: Server;
   private config: GRPCServiceConfig;
   private stateStore?: DistributedStateStore;
+  private toolExecutor?: (toolName: string, input: any) => Promise<any>;
+  private toolExecutionCount = 0;
+  private toolErrorCount = 0;
+  private totalExecutionTimeMs = 0;
   
   constructor(config: GRPCServiceConfig) {
     this.config = config;
     this.stateStore = config.stateStore;
+    this.toolExecutor = config.toolExecutor;
     this.server = new Server();
     this.setupServices();
   }
@@ -62,16 +69,41 @@ export class GRPCService {
     
     try {
       const input = JSON.parse(input_data.toString('utf8'));
-      const result = { 
-        success: true, 
-        result_data: Buffer.from(JSON.stringify({ output: `Mock result for ${tool_name}` })),
-        execution_time_ms: 0 
-      };
-      callback(null, {
-        success: true,
-        result_data: result.result_data,
-        execution_time_ms: 0
-      });
+      const start = Date.now();
+
+      if (!this.toolExecutor) {
+        callback(null, {
+          success: false,
+          result_data: Buffer.alloc(0),
+          error_message: 'No tool executor configured',
+          execution_time_ms: Date.now() - start
+        });
+        return;
+      }
+
+      this.toolExecutor(tool_name, input)
+        .then((result: any) => {
+          const executionTime = Date.now() - start;
+          this.toolExecutionCount += 1;
+          this.totalExecutionTimeMs += executionTime;
+          callback(null, {
+            success: true,
+            result_data: Buffer.from(JSON.stringify(result ?? {})),
+            execution_time_ms: executionTime
+          });
+        })
+        .catch((error: any) => {
+          const executionTime = Date.now() - start;
+          this.toolExecutionCount += 1;
+          this.toolErrorCount += 1;
+          this.totalExecutionTimeMs += executionTime;
+          callback(null, {
+            success: false,
+            result_data: Buffer.alloc(0),
+            error_message: error?.message || String(error),
+            execution_time_ms: executionTime
+          });
+        });
     } catch (error: any) {
       callback(null, {
         success: false,
@@ -85,7 +117,7 @@ export class GRPCService {
   private getSystemHealth(call: any, callback: any) {
     const healthData = {
       timestamp: Date.now(),
-      tool_count: 0,
+      tool_count: this.toolExecutionCount,
       active_agents: this.stateStore ? 1 : 0,
       status: 'healthy'
     };
@@ -95,17 +127,22 @@ export class GRPCService {
   private streamMetrics(call: any, send: any) {
     const { interval_ms } = call.request;
     const interval = interval_ms || 1000;
+    let previousToolExecutions = this.toolExecutionCount;
     
     const timer = setInterval(() => {
       if (call.cancelled) {
         clearInterval(timer);
         return;
       }
+
+      const currentExecutions = this.toolExecutionCount;
+      const executedSinceLastTick = currentExecutions - previousToolExecutions;
+      previousToolExecutions = currentExecutions;
       
       const metrics = {
-        cpu_usage: Math.random() * 10,
+        cpu_usage: (os.loadavg()[0] / Math.max(1, os.cpus().length)) * 100,
         memory_usage_mb: process.memoryUsage().heapUsed / 1024 / 1024,
-        message_throughput: Math.floor(Math.random() * 100)
+        message_throughput: Math.max(0, Math.floor((executedSinceLastTick * 1000) / interval))
       };
       
       send.write(metrics);
@@ -182,12 +219,10 @@ export class GRPCService {
       const valueJson = value ? JSON.parse(value.toString('utf8')) : null;
       
       if (this.stateStore) {
-        const localStore = this.stateStore as any;
-        // 使用内部方法直接更新状态，避免再次 gRPC 广播
         if (valueJson !== null) {
-          localStore._internal.set?.(key, valueJson, false);
+          this.stateStore.applyReplicaState(key, valueJson, 'set', timestamp);
         } else {
-          localStore._internal.delete?.(key, false);
+          this.stateStore.applyReplicaState(key, null, 'delete', timestamp);
         }
       }
       
@@ -231,7 +266,7 @@ export class GRPCService {
       this.server.bindAsync(
         `0.0.0.0:${this.config.port}`,
         ServerCredentials.createInsecure(),
-        (error, port) => {
+        (error: Error | null, port: number) => {
           if (error) {
             reject(error);
           } else {

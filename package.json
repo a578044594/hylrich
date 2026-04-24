@@ -6,8 +6,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "bash scripts/build.sh",
+    "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
     "test": "jest",
+    "test:core": "jest __tests__/state/DistributedStateStore.test.ts __tests__/BasicMetricsCollector.test.ts --runInBand",
+    "smoke": "bash scripts/smoke-test.sh",
     "test:coverage": "jest --coverage",
     "test:unit": "jest --testPathPattern=unit",
     "test:integration": "jest --testPathPattern=integration",
