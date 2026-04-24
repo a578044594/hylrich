@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 echo "Building Hylrich..."
 
 # 复制proto文件到dist目录

@@ -1,12 +1,21 @@
 import { AgentSystem } from '../services/AgentSystem';
+import { AgentSystemOptions } from '../services/AgentSystem';
 import { EventBus } from './EventBus';
 import { ContextManager } from '../services/ContextManager';
 
 export class HylrichCore {
   private agentSystem: AgentSystem;
   
-  constructor() {
-    this.agentSystem = new AgentSystem();
+  constructor(options?: AgentSystemOptions) {
+    this.agentSystem = new AgentSystem(options);
+  }
+
+  async start(): Promise<void> {
+    await this.agentSystem.start();
+  }
+
+  async stop(): Promise<void> {
+    await this.agentSystem.stop();
   }
 
   getStatus() {

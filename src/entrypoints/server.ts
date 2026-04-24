@@ -1,10 +1,11 @@
 import * as http from 'http';
 import { HylrichCore } from '../core/HylrichCore';
 
-function main() {
-  const core = new HylrichCore();
-  const port = 8090;
-  const host = '0.0.0.0';
+async function main() {
+  const core = new HylrichCore({ autoStart: false });
+  const port = Number(process.env.PORT || 8090);
+  const host = process.env.HOST || '0.0.0.0';
+  await core.start();
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
@@ -117,6 +118,20 @@ function main() {
     console.log(`Chat: POST /chat`);
     console.log(`Tool: POST /tool`);
   });
+
+  const shutdown = async (signal: string) => {
+    console.log(`\nReceived ${signal}, shutting down...`);
+    server.close(async () => {
+      await core.stop();
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
-main();
+main().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});

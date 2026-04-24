@@ -1,4 +1,4 @@
-import WebSocket from "ws";
+const WebSocket = require("ws");
 
 export interface WebSocketConfig {
   url: string;
@@ -8,7 +8,7 @@ export interface WebSocketConfig {
 }
 
 export class WebSocketBus {
-  private ws: WebSocket | null = null;
+  private ws: any = null;
   private reconnectAttempts = 0;
   private messageQueue: any[] = [];
   private isConnected = false;
@@ -40,7 +40,7 @@ export class WebSocketBus {
           this.handleReconnect();
         });
         
-        this.ws.on("error", (error) => {
+        this.ws.on("error", (error: Error) => {
           reject(error);
         });
         
