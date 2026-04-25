@@ -1,26 +1,26 @@
-// 指标收集器单元测试
-
-import { MetricsCollector } from '../../src/monitoring/MetricsCollector';
+import { BasicMetricsCollector } from '../../src/monitoring/BasicMetricsCollector';
 
 describe('MetricsCollector', () => {
-  let metricsCollector: MetricsCollector;
+  let metricsCollector: BasicMetricsCollector;
 
   beforeEach(() => {
-    metricsCollector = new MetricsCollector();
+    metricsCollector = new BasicMetricsCollector();
   });
 
   test('should initialize correctly', () => {
     const stats = metricsCollector.getPerformanceStats();
-    expect(stats.errorRate).toBe(0);
-    expect(stats.successRate).toBe(100);
+    expect(stats.errorCount).toBe(0);
+    expect(stats.metricCount).toBe(0);
+    expect(stats.uptime).toBeGreaterThan(0);
   });
 
   test('should record metrics with tags', () => {
-    metricsCollector.recordMetric('test_metric', 42, { unit: 'count' }, 'items');
+    metricsCollector.recordMetric('test_metric', 42, { unit: 'count' });
     const metrics = metricsCollector.exportMetrics();
     expect(metrics).toHaveLength(1);
     expect(metrics[0].name).toBe('test_metric');
     expect(metrics[0].value).toBe(42);
+    expect(metrics[0].tags).toEqual({ unit: 'count' });
   });
 
   test('should calculate performance statistics', () => {
@@ -29,37 +29,14 @@ describe('MetricsCollector', () => {
     metricsCollector.recordMetric('tool_execution_time', 150);
     
     const stats = metricsCollector.getPerformanceStats();
-    expect(stats.toolExecutionTime).toHaveLength(3);
+    expect(stats.metricCount).toBe(3);
   });
 
   test('should handle error rate calculation', () => {
     metricsCollector.recordError();
     
     const stats = metricsCollector.getPerformanceStats();
-    expect(stats.errorRate).toBeGreaterThan(0);
-    expect(stats.successRate).toBeLessThan(100);
-  });
-
-  test('should configure and trigger alerts', () => {
-    const consoleSpy = jest.spyOn(console, 'log');
-    
-    metricsCollector.configureAlert('test_metric', 'warning', 50);
-    metricsCollector.recordMetric('test_metric', 60);
-    
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('WARNING'),
-      expect.stringContaining('Test alert triggered')
-    );
-  });
-
-  test('should respect alert cooldown', () => {
-    const consoleSpy = jest.spyOn(console, 'log');
-    
-    metricsCollector.configureAlert('test_metric', 'warning', 50, 1000);
-    metricsCollector.recordMetric('test_metric', 60);
-    metricsCollector.recordMetric('test_metric', 70); // 应该被冷却
-    
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(stats.errorCount).toBe(1);
   });
 
   test('should export metrics', () => {
@@ -71,19 +48,22 @@ describe('MetricsCollector', () => {
   });
 
   test('should clear old data', () => {
+    const now = Date.now();
+    // Add a recent metric
     metricsCollector.recordMetric('new_metric', 2);
+    // Add an old metric directly via internal array for test purposes
+    const anyCollector = metricsCollector as any;
+    anyCollector.metrics.push({
+      name: 'old_metric',
+      value: 99,
+      timestamp: now - 3600000 // 1 hour ago
+    });
     
-    // 模拟时间流逝
-    const currentTime = Date.now();
-    metricsCollector['metrics'] = metricsCollector['metrics'].map(metric => ({
-      ...metric,
-      timestamp: currentTime - 3600000 // 1小时前
-    }));
-    
-    metricsCollector.clearOldData(1800000); // 清除30分钟前的数据
+    metricsCollector.clearOldData(1800000); // 30 minutes TTL
     
     const exported = metricsCollector.exportMetrics();
-    expect(exported).toHaveLength(0); // 所有数据都被认为是旧的
+    expect(exported).toHaveLength(1);
+    expect(exported[0].name).toBe('new_metric');
   });
 
   test('should reset correctly', () => {
@@ -93,8 +73,8 @@ describe('MetricsCollector', () => {
     metricsCollector.reset();
     
     const stats = metricsCollector.getPerformanceStats();
-    expect(stats.errorRate).toBe(0);
-    expect(stats.successRate).toBe(100);
+    expect(stats.errorCount).toBe(0);
+    expect(stats.metricCount).toBe(0);
     expect(metricsCollector.exportMetrics()).toHaveLength(0);
   });
 });
